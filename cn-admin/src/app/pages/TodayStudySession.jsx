@@ -1,9 +1,12 @@
+// src/app/pages/TodayStudySession.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import WordSession from "./WordSession";
 import GrammarSession from "./GrammarSession";
 import DialogSession from "./DialogSession";
+import SentenceSession from "./SentenceSession";
 
 // MUI
 import {
@@ -24,8 +27,10 @@ export default function TodayStudySession() {
   const { state } = useLocation();
   const routine = state?.routine;
 
-  const [step, setStep] = useState("words"); // "words" | "grammar" | "dialogs"
+  // "words" | "sentences" | "grammar" | "dialogs"
+  const [step, setStep] = useState("words");
   const [wordResult, setWordResult] = useState(null);
+  const [sentenceResult, setSentenceResult] = useState(null);
   const [grammarResult, setGrammarResult] = useState(null);
 
   const [startedAt] = useState(() => Date.now());
@@ -67,19 +72,21 @@ export default function TodayStudySession() {
 
   const steps = [
     { key: "words", label: "단어" },
+    { key: "sentences", label: "문장" },
     { key: "grammar", label: "문법" },
     { key: "dialogs", label: "회화" },
   ];
   const currentIdx = steps.findIndex((s) => s.key === step);
 
   const wordCount = routine.words?.length ?? 0;
+  const sentenceCount = routine.sentences?.length ?? 0;
   const grammarCount = routine.grammar?.length ?? 0;
   const dialogCount = routine.dialogs?.length ?? 0;
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
       <Stack spacing={2} sx={{ p: 1 }}>
-        {/* ✅ 상단 진행 헤더 (여기서만 "오늘 공부" 표시) */}
+        {/* 상단 진행 헤더 */}
         <Card>
           <CardContent>
             <Stack spacing={1.5}>
@@ -111,12 +118,13 @@ export default function TodayStudySession() {
           </CardContent>
         </Card>
 
-        {/* ✅ 오늘의 단어 / 문법 / 회화 카드들을 한 줄에 모두 보여주기 */}
+        {/* 오늘의 단어 / 문장 / 문법 / 회화 카드 */}
         <Stack
           spacing={1.5}
           direction={{ xs: "column", md: "row" }}
           sx={{ mt: 0.5 }}
         >
+          {/* 단어 카드 */}
           <Card
             onClick={() => setStep("words")}
             sx={{
@@ -146,6 +154,37 @@ export default function TodayStudySession() {
             </CardContent>
           </Card>
 
+          {/* 문장 카드 */}
+          <Card
+            onClick={() => setStep("sentences")}
+            sx={{
+              flex: 1,
+              borderRadius: 3,
+              cursor: "pointer",
+              border:
+                step === "sentences" ? "2px solid #1976d2" : "1px solid #eee",
+            }}
+          >
+            <CardContent>
+              <Stack spacing={0.5}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontWeight: 600 }}
+                >
+                  오늘의 문장
+                </Typography>
+                <Typography variant="h6" fontWeight={800}>
+                  {sentenceCount}개
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  단어와 연결된 예문 학습
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* 문법 카드 */}
           <Card
             onClick={() => setStep("grammar")}
             sx={{
@@ -175,6 +214,7 @@ export default function TodayStudySession() {
             </CardContent>
           </Card>
 
+          {/* 회화 카드 */}
           <Card
             onClick={() => setStep("dialogs")}
             sx={{
@@ -205,13 +245,24 @@ export default function TodayStudySession() {
           </Card>
         </Stack>
 
-        {/* 아래엔 실제 학습 세션 하나만 표시 (step에 따라 교체) */}
+        {/* 실제 학습 세션 (step에 따라 교체) */}
         {step === "words" && (
           <WordSession
             wordIds={routine.words}
             mode="today"
             onDone={(result) => {
               setWordResult(result);
+              setStep("sentences");
+            }}
+          />
+        )}
+
+        {step === "sentences" && (
+          <SentenceSession
+            sentenceIds={routine.sentences}
+            mode="today"
+            onDone={(result) => {
+              setSentenceResult(result);
               setStep("grammar");
             }}
           />
@@ -237,6 +288,7 @@ export default function TodayStudySession() {
                 state: {
                   routine,
                   wordResult,
+                  sentenceResult,
                   grammarResult,
                   dialogResult: result,
                   durationSec,

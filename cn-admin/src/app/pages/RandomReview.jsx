@@ -19,6 +19,9 @@ import {
   Divider,
   Grid,
   TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from "@mui/material";
 
 import ReplayIcon from "@mui/icons-material/Replay";
@@ -34,8 +37,10 @@ export default function RandomReview() {
   const [words, setWords] = useState([]);
   const [grammar, setGrammar] = useState([]);
   const [dialogs, setDialogs] = useState([]);
+  const [sentences, setSentences] = useState([]);
 
   const [selectedDateKey, setSelectedDateKey] = useState("");
+  const [dateSelectorOpen, setDateSelectorOpen] = useState(false);
 
   // dateKey → historyDoc 맵
   const historyByKey = useMemo(
@@ -56,17 +61,25 @@ export default function RandomReview() {
       try {
         setLoading(true);
 
-        const [allHistory, allWords, allGrammar, allDialogs] = await Promise.all([
+        const [
+          allHistory,
+          allWords,
+          allGrammar,
+          allDialogs,
+          allSentences,
+        ] = await Promise.all([
           listUserHistoryAll(user.uid),
           listCollection("words"),
           listCollection("grammar"),
           listCollection("dialogs"),
+          listCollection("sentences"),
         ]);
 
         setHistoryDocs(allHistory);
         setWords(allWords);
         setGrammar(allGrammar);
         setDialogs(allDialogs);
+        setSentences(allSentences);
 
         // 기본 선택 날짜: 오늘 기록이 있으면 오늘, 없으면 가장 최근 날짜
         if (allHistory.length > 0) {
@@ -101,13 +114,37 @@ export default function RandomReview() {
     () => new Map(dialogs.map((d) => [d.dialogId, d])),
     [dialogs]
   );
+  const sentenceMap = useMemo(
+    () =>
+      new Map(
+        sentences.map((s) => [
+          s.sentenceId || s.id, // 둘 다 대응
+          s,
+        ])
+      ),
+    [sentences]
+  );
 
   // 선택된 날짜의 실제 엔트리들
   const reviewItems = useMemo(() => {
-    if (!selectedHistory) return { wordList: [], grammarList: [], dialogList: [] };
+    if (!selectedHistory) {
+      return {
+        wordList: [],
+        sentenceList: [],
+        grammarList: [],
+        dialogList: [],
+      };
+    }
 
     const wordList = (selectedHistory.wordsDone || [])
       .map((id) => wordMap.get(id))
+      .filter(Boolean);
+
+    // sentencesDone / sentenceDone 둘 다 대응
+    const sentenceIds =
+      selectedHistory.sentencesDone || selectedHistory.sentenceDone || [];
+    const sentenceList = sentenceIds
+      .map((id) => sentenceMap.get(id))
       .filter(Boolean);
 
     const grammarList = (selectedHistory.grammarDone || [])
@@ -118,8 +155,8 @@ export default function RandomReview() {
       .map((id) => dialogMap.get(id))
       .filter(Boolean);
 
-    return { wordList, grammarList, dialogList };
-  }, [selectedHistory, wordMap, grammarMap, dialogMap]);
+    return { wordList, sentenceList, grammarList, dialogList };
+  }, [selectedHistory, wordMap, sentenceMap, grammarMap, dialogMap]);
 
   if (!user) {
     return (
@@ -141,7 +178,7 @@ export default function RandomReview() {
     .map((h) => h.dateKey)
     .sort((a, b) => b.localeCompare(a)); // 최신→과거
 
-  const { wordList, grammarList, dialogList } = reviewItems;
+  const { wordList, sentenceList, grammarList, dialogList } = reviewItems;
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
@@ -157,10 +194,10 @@ export default function RandomReview() {
 
         {/* 안내 */}
         <Typography variant="body2" color="text.secondary">
-          날짜를 선택하면, 그날 학습했던 단어·문법·회화를 한 번에 볼 수 있어.
+          날짜를 선택하면, 그날 학습했던 단어·문장·문법·회화를 한 번에 볼 수 있어.
         </Typography>
 
-        {/* 날짜 선택 */}
+        {/* 날짜 선택 카드 */}
         <Card>
           <CardContent>
             <Stack spacing={1.5}>
@@ -169,11 +206,17 @@ export default function RandomReview() {
                 <Typography fontWeight={800}>날짜 선택</Typography>
                 <Chip
                   size="small"
+                  clickable
                   label={
                     availableDates.length
                       ? `${availableDates.length}일 학습 기록`
                       : "기록 없음"
                   }
+                  onClick={() => {
+                    if (availableDates.length > 0) {
+                      setDateSelectorOpen(true);
+                    }
+                  }}
                 />
               </Stack>
 
@@ -187,43 +230,63 @@ export default function RandomReview() {
                   InputLabelProps={{ shrink: true }}
                   sx={{ maxWidth: 220 }}
                 />
-
-                {/* 빠른 선택용 최근 날짜 칩들 */}
-                <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                  {availableDates.slice(0, 5).map((d) => (
-                    <Chip
-                      key={d}
-                      label={d}
-                      size="small"
-                      clickable
-                      color={d === selectedDateKey ? "primary" : "default"}
-                      onClick={() => setSelectedDateKey(d)}
-                      sx={{ mb: 0.5 }}
-                    />
-                  ))}
-                </Stack>
               </Stack>
 
               {!selectedHistory && (
                 <Typography variant="caption" color="text.secondary">
-                  선택한 날짜({selectedDateKey || "미선택"})에는 학습 기록이 없습니다.
+                  선택한 날짜({selectedDateKey || "미선택"})에는 학습 기록이
+                  없습니다.
                 </Typography>
               )}
 
               {selectedHistory && (
                 <Typography variant="caption" color="text.secondary">
-                  {selectedDateKey} 학습 요약 — 단어 {wordList.length}개 · 문법{" "}
-                  {grammarList.length}개 · 회화 {dialogList.length}개
+                  {selectedDateKey} 학습 요약 — 단어 {wordList.length}개 · 문장{" "}
+                  {sentenceList.length}개 · 문법 {grammarList.length}개 · 회화{" "}
+                  {dialogList.length}개
                 </Typography>
               )}
             </Stack>
           </CardContent>
         </Card>
 
+        {/* 날짜 선택 모달 */}
+        <Dialog
+          open={dateSelectorOpen}
+          onClose={() => setDateSelectorOpen(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>학습 날짜 선택</DialogTitle>
+          <DialogContent>
+            <Stack spacing={0.75} sx={{ mt: 1, pb: 1 }}>
+              {availableDates.length === 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  아직 학습 기록이 없습니다.
+                </Typography>
+              )}
+              {availableDates.map((d) => (
+                <Chip
+                  key={d}
+                  label={d}
+                  size="small"
+                  clickable
+                  color={d === selectedDateKey ? "primary" : "default"}
+                  onClick={() => {
+                    setSelectedDateKey(d);
+                    setDateSelectorOpen(false);
+                  }}
+                  sx={{ mb: 0.5 }}
+                />
+              ))}
+            </Stack>
+          </DialogContent>
+        </Dialog>
+
         {/* 실제 복습 내용들 */}
         {selectedHistory && (
           <>
-            {/* 단어 복습 */}
+            {/* 🔹 단어 복습 (뜻 + 3개씩 배치) */}
             <Card>
               <CardContent>
                 <Stack spacing={1.5}>
@@ -242,7 +305,6 @@ export default function RandomReview() {
 
                   <Grid container spacing={1.2}>
                     {wordList.map((w) => {
-                      // 🔥 한국어 발음 생성 로직
                       const koPron =
                         w.koPron ||
                         (w.syllables?.length
@@ -251,18 +313,35 @@ export default function RandomReview() {
                           ? freeTextPinyinToKorean(w.pinyin)
                           : "");
 
+                      const meaning =
+                        w.ko ||
+                        w.meaning_ko ||
+                        w.meaningKr ||
+                        w.kr ||
+                        "";
+
                       return (
-                        <Grid item xs={12} sm={6} key={w.wordId}>
+                        <Grid item xs={12} sm={4} md={4} key={w.wordId}>
                           <Box
                             sx={{
                               borderRadius: 2,
                               border: "1px solid #eee",
                               p: 1.2,
                               bgcolor: "#F9FAFF",
+                              height: "100%",
                             }}
                           >
-                            {/* 한자 */}
+                            {/* 한자 + 뜻 */}
                             <Typography fontWeight={800}>{w.zh}</Typography>
+
+                            {meaning && (
+                              <Typography
+                                variant="body2"
+                                sx={{ mt: 0.1, fontWeight: 600 }}
+                              >
+                                {meaning}
+                              </Typography>
+                            )}
 
                             {/* 병음 */}
                             {w.pinyin && (
@@ -285,17 +364,6 @@ export default function RandomReview() {
                                 {koPron}
                               </Typography>
                             )}
-
-                            {/* 뜻 */}
-                            {w.ko && (
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{ mt: 0.2 }}
-                              >
-                                {w.ko}
-                              </Typography>
-                            )}
                           </Box>
                         </Grid>
                       );
@@ -305,7 +373,80 @@ export default function RandomReview() {
               </CardContent>
             </Card>
 
-            {/* 문법 복습 */}
+            {/* 🔹 문장 복습 */}
+            <Card>
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip size="small" label="문장" color="info" />
+                    <Typography fontWeight={800}>
+                      문장 {sentenceList.length}개
+                    </Typography>
+                  </Stack>
+
+                  {sentenceList.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      이 날은 문장 학습 기록이 없습니다.
+                    </Typography>
+                  )}
+
+                  <Stack spacing={1.2}>
+                    {sentenceList.map((s) => {
+                      const pinyin = s.pinyin || "";
+                      const koPron = pinyin
+                        ? freeTextPinyinToKorean(pinyin)
+                        : "";
+
+                      return (
+                        <Box
+                          key={s.sentenceId || s.id}
+                          sx={{
+                            borderRadius: 2,
+                            border: "1px solid #eee",
+                            p: 1.3,
+                            bgcolor: "#EFF6FF",
+                          }}
+                        >
+                          <Typography fontWeight={800}>{s.zh}</Typography>
+
+                          {pinyin && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.2 }}
+                            >
+                              {pinyin}
+                            </Typography>
+                          )}
+
+                          {koPron && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ mt: 0.2, display: "block" }}
+                            >
+                              {koPron}
+                            </Typography>
+                          )}
+
+                          {s.ko && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.2 }}
+                            >
+                              {s.ko}
+                            </Typography>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            {/* 🔹 문법 복습 */}
             <Card>
               <CardContent>
                 <Stack spacing={1.5}>
@@ -363,7 +504,7 @@ export default function RandomReview() {
               </CardContent>
             </Card>
 
-            {/* 회화 복습 */}
+            {/* 🔹 회화 복습 (병음 + 한글발음 추가) */}
             <Card>
               <CardContent>
                 <Stack spacing={1.5}>
@@ -401,25 +542,54 @@ export default function RandomReview() {
                         )}
                         <Divider sx={{ my: 0.5 }} />
 
-                        {(d.lines || []).slice(0, 3).map((l, idx) => (
-                          <Box key={idx} sx={{ mb: 0.5 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {l.role || `L${idx + 1}`}
-                            </Typography>
-                            <Typography sx={{ mt: 0.1 }}>{l.zh}</Typography>
-                            {l.ko && (
+                        {(d.lines || []).slice(0, 3).map((l, idx) => {
+                          const pinyin = l.pinyin || "";
+                          const koPron = pinyin
+                            ? freeTextPinyinToKorean(pinyin)
+                            : "";
+
+                          return (
+                            <Box key={idx} sx={{ mb: 0.5 }}>
                               <Typography
-                                variant="body2"
+                                variant="caption"
                                 color="text.secondary"
                               >
-                                {l.ko}
+                                {l.role || `L${idx + 1}`}
                               </Typography>
-                            )}
-                          </Box>
-                        ))}
+                              <Typography sx={{ mt: 0.1 }}>
+                                {l.zh}
+                              </Typography>
+
+                              {pinyin && (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  {pinyin}
+                                </Typography>
+                              )}
+
+                              {koPron && (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ display: "block" }}
+                                >
+                                  {koPron}
+                                </Typography>
+                              )}
+
+                              {l.ko && (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  {l.ko}
+                                </Typography>
+                              )}
+                            </Box>
+                          );
+                        })}
 
                         {d.lines && d.lines.length > 3 && (
                           <Typography

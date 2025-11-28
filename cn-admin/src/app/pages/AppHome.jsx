@@ -71,13 +71,13 @@ export default function AppHome() {
           ])
         );
 
-        // 🔥🔥🔥 여기만 수정됨 — 오늘 루틴 9개/2개/1개 생성
-        const todaySet = buildRoutineFromHistory(pools, recentIds, {
-          wordCount: 9,      // 단어 9개
-          grammarCount: 2,   // 문법 2개
-          dialogCount: 1,    // 회화 1개
-          sentenceCount: 0,  // 문장은 오늘 제외
-        });
+       
+const todaySet = buildRoutineFromHistory(pools, recentIds, {
+  wordCount: 9,      // 단어 9개
+  sentenceCount: 9,  // 문장 9개
+  grammarCount: 2,   // 문법 2개
+  dialogCount: 1,    // 회화 1개
+});
 
         setRoutine(todaySet);
       } catch (e) {
@@ -89,10 +89,11 @@ export default function AppHome() {
     })();
   }, [user]);
 
-  const w = routine?.words?.length ?? 0;
-  const g = routine?.grammar?.length ?? 0;
-  const d = routine?.dialogs?.length ?? 0;
-  const total = w + g + d;
+const w = routine?.words?.length ?? 0;
+const s = routine?.sentences?.length ?? 0;
+const g = routine?.grammar?.length ?? 0;
+const d = routine?.dialogs?.length ?? 0;
+const total = w + s + g + d;
 
   const homeCards = useMemo(
     () => [
@@ -201,7 +202,7 @@ export default function AppHome() {
                     오늘 공부
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    단어·문법·회화를 한 번에 끝내자
+                  단어·문장·문법·회화를 한 번에 끝내자
                   </Typography>
                 </Box>
 
@@ -237,17 +238,21 @@ export default function AppHome() {
 
               {!loading && routine && (
                 <>
-                  <Grid container spacing={1.5}>
-                    <Grid item xs={4}>
-                      <MiniCountCard label="단어" value={w} color="primary.main" bg="#F3F6FF" />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <MiniCountCard label="문법" value={g} color="#D97706" bg="#FFF7E8" />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <MiniCountCard label="회화" value={d} color="#059669" bg="#F0FBF5" />
-                    </Grid>
-                  </Grid>
+<Grid container spacing={1.5}>
+  <Grid item xs={3}>
+    <MiniCountCard label="단어" value={w} color="primary.main" bg="#F3F6FF" />
+  </Grid>
+  <Grid item xs={3}>
+    <MiniCountCard label="문장" value={s} color="#2563EB" bg="#EFF6FF" />
+  </Grid>
+  <Grid item xs={3}>
+    <MiniCountCard label="문법" value={g} color="#D97706" bg="#FFF7E8" />
+  </Grid>
+  <Grid item xs={3}>
+    <MiniCountCard label="회화" value={d} color="#059669" bg="#F0FBF5" />
+  </Grid>
+</Grid>
+
 
                   <Stack spacing={0.8}>
                     <Stack direction="row" justifyContent="space-between">

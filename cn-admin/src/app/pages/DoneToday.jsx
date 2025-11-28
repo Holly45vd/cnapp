@@ -57,10 +57,11 @@ export default function DoneToday() {
     wordsDone.length + grammarDone.length + dialogsDone.length + sentencesDone.length;
   const totalKnown = wordsKnown.length;
 
-  const totalGoal =
-    (routine.words?.length || 0) +
-    (routine.grammar?.length || 0) +
-    (routine.dialogs?.length || 0);
+const totalGoal =
+  (routine.words?.length || 0) +
+  (routine.sentences?.length || 0) +
+  (routine.grammar?.length || 0) +
+  (routine.dialogs?.length || 0);
 
   const learnedPct = totalGoal ? Math.round((totalLearn / totalGoal) * 100) : 0;
   const knownPct = totalGoal ? Math.round((totalKnown / totalGoal) * 100) : 0;
