@@ -6,6 +6,7 @@ import {
   freeTextPinyinToKorean,
   pinyinArrayToKorean,
 } from "../../lib/pinyinKorean";
+import { speakZh } from "../../lib/ttsHelper"; // 🔊 중국어 TTS 추가
 
 // MUI
 import {
@@ -125,7 +126,6 @@ export default function RandomReview() {
 
   // --------------------------------
   // 선택한 날짜의 “다시보기 / 외웠음” 분리
-  // (신규 + 예전 필드 모두 대응)
   // --------------------------------
   const reviewItems = useMemo(() => {
     if (!selectedHistory) {
@@ -241,6 +241,30 @@ export default function RandomReview() {
     dialogMaster,
   } = reviewItems;
 
+  // 🔊 단어 클릭 시 중국어(또는 TTS용 텍스트) 읽기
+  const handleSpeakWord = (w) => {
+    const text = w?.audio?.ttsText || w?.zh || "";
+    if (!text) return;
+    speakZh(text);
+  };
+
+  // 🔊 문장 클릭 시
+  const handleSpeakSentence = (s) => {
+    const text = s?.audio?.ttsText || s?.zh || "";
+    if (!text) return;
+    speakZh(text);
+  };
+
+  // 🔊 회화 카드 클릭 시 – 해당 회화의 중국어 줄 전부 이어서 읽기
+  const handleSpeakDialog = (d) => {
+    const zhAll = (d?.lines || [])
+      .map((l) => l.zh)
+      .filter(Boolean)
+      .join(" ");
+    if (!zhAll) return;
+    speakZh(zhAll);
+  };
+
   const SectionCard = ({ title, color, children }) => (
     <Card>
       <CardContent>
@@ -268,9 +292,9 @@ export default function RandomReview() {
 
         {/* 안내 */}
         <Typography variant="body2" color="text.secondary">
-          날짜를 선택하면, 그날 학습했던 단어·문장·문법·회화를
-          {" "}
-          <b>다시보기 / 외웠음</b>으로 나눠서 볼 수 있어.
+          날짜를 선택하면, 그날 학습했던 단어·문장·문법·회화를{" "}
+          <b>다시보기 / 외웠음</b>으로 나눠서 볼 수 있어. 카드 자체를 누르면
+          중국어 발음을 들을 수 있어.
         </Typography>
 
         {/* 날짜 선택 카드 */}
@@ -324,7 +348,7 @@ export default function RandomReview() {
           </CardContent>
         </Card>
 
-        {/* 날짜 선택 모달 (예전처럼 날짜 리스트 클릭해서 이동) */}
+        {/* 날짜 선택 모달 */}
         <Dialog
           open={dateSelectorOpen}
           onClose={() => setDateSelectorOpen(false)}
@@ -380,11 +404,16 @@ export default function RandomReview() {
                 return (
                   <Grid item xs={12} sm={4} key={w.wordId}>
                     <Box
+                      onClick={() => handleSpeakWord(w)}
+                      role="button"
+                      tabIndex={0}
                       sx={{
                         borderRadius: 2,
                         border: "1px solid #eee",
                         p: 1.3,
                         bgcolor: "#FFF7E8",
+                        cursor: "pointer",
+                        "&:hover": { bgcolor: "#FFECCB" },
                       }}
                     >
                       <Typography fontWeight={800}>{w.zh}</Typography>
@@ -440,11 +469,16 @@ export default function RandomReview() {
                 return (
                   <Grid item xs={12} sm={4} key={w.wordId}>
                     <Box
+                      onClick={() => handleSpeakWord(w)}
+                      role="button"
+                      tabIndex={0}
                       sx={{
                         borderRadius: 2,
                         border: "1px solid #eee",
                         p: 1.3,
                         bgcolor: "#E8FFF3",
+                        cursor: "pointer",
+                        "&:hover": { bgcolor: "#D4FBE7" },
                       }}
                     >
                       <Typography fontWeight={800}>{w.zh}</Typography>
@@ -492,11 +526,16 @@ export default function RandomReview() {
                 return (
                   <Box
                     key={s.sentenceId || s.id}
+                    onClick={() => handleSpeakSentence(s)}
+                    role="button"
+                    tabIndex={0}
                     sx={{
                       borderRadius: 2,
                       border: "1px solid #eee",
                       p: 1.3,
                       bgcolor: "#FFF7E8",
+                      cursor: "pointer",
+                      "&:hover": { bgcolor: "#FFECCB" },
                     }}
                   >
                     <Typography fontWeight={800}>{s.zh}</Typography>
@@ -549,11 +588,16 @@ export default function RandomReview() {
                 return (
                   <Box
                     key={s.sentenceId || s.id}
+                    onClick={() => handleSpeakSentence(s)}
+                    role="button"
+                    tabIndex={0}
                     sx={{
                       borderRadius: 2,
                       border: "1px solid #eee",
                       p: 1.3,
                       bgcolor: "#E8FFF3",
+                      cursor: "pointer",
+                      "&:hover": { bgcolor: "#D4FBE7" },
                     }}
                   >
                     <Typography fontWeight={800}>{s.zh}</Typography>
@@ -696,11 +740,16 @@ export default function RandomReview() {
               {dialogReview.map((d) => (
                 <Box
                   key={d.dialogId}
+                  onClick={() => handleSpeakDialog(d)}
+                  role="button"
+                  tabIndex={0}
                   sx={{
                     borderRadius: 2,
                     border: "1px solid #eee",
                     p: 1.3,
                     bgcolor: "#FFF7E8",
+                    cursor: "pointer",
+                    "&:hover": { bgcolor: "#FFECCB" },
                   }}
                 >
                   {d.topic && (
@@ -773,11 +822,16 @@ export default function RandomReview() {
               {dialogMaster.map((d) => (
                 <Box
                   key={d.dialogId}
+                  onClick={() => handleSpeakDialog(d)}
+                  role="button"
+                  tabIndex={0}
                   sx={{
                     borderRadius: 2,
                     border: "1px solid #eee",
                     p: 1.3,
                     bgcolor: "#E8FFF3",
+                    cursor: "pointer",
+                    "&:hover": { bgcolor: "#D4FBE7" },
                   }}
                 >
                   {d.topic && (

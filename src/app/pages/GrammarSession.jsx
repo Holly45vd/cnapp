@@ -107,9 +107,10 @@ export default function GrammarSession({
     ? freeTextPinyinToKorean(examplePinyin)
     : "";
 
+  // 🔊 대표 예문 TTS: 항상 중국어 문장만 읽게 고정
   const handleExampleSpeak = () => {
     if (!example?.zh) return;
-    speakZh(example.audio?.ttsText || example.zh);
+    speakZh(example.zh);
   };
 
   // 의미(중문) → 병음 → 한국어 발음
@@ -486,15 +487,19 @@ export default function GrammarSession({
                 <Stack spacing={1.5}>
                   {current.examples.slice(1).map((ex) => {
                     const pinyin = ex.pinyin || "";
-                    const koPron = pinyin ? freeTextPinyinToKorean(pinyin) : "";
+                    const koPron = pinyin
+                      ? freeTextPinyinToKorean(pinyin)
+                      : "";
                     const structure =
                       ex.structure &&
                       Object.entries(ex.structure)
                         .map(([k, v]) => `${k}: ${v}`)
                         .join(" / ");
 
+                    // 🔊 개별 예문도 항상 중국어 문장만 읽게 고정
                     const handleSpeak = () => {
-                      speakZh(ex.audio?.ttsText || ex.zh);
+                      if (!ex?.zh) return;
+                      speakZh(ex.zh);
                     };
 
                     return (
@@ -676,8 +681,6 @@ export default function GrammarSession({
                 </Stack>
               </Box>
             )}
-
-        
 
             {/* 진행률 */}
             <LinearProgress

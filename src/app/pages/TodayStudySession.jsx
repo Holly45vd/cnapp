@@ -118,124 +118,43 @@ export default function TodayStudySession() {
           </CardContent>
         </Card>
 
-        {/* 오늘의 단어 / 문장 / 문법 / 회화 카드 */}
-        <Stack
-          spacing={1.5}
-          direction={{ xs: "column", md: "row" }}
-          sx={{ mt: 0.5 }}
+        {/* 오늘의 단어 / 문장 / 문법 / 회화 - 한 줄 미니 버튼 카드 */}
+        <Box
+          sx={{
+            mt: 0.5,
+            borderRadius: 3,
+            border: "1px solid #EEF0F5",
+            bgcolor: "#FFFFFF",
+            p: 1,
+            display: "flex",
+            gap: 1,
+          }}
         >
-          {/* 단어 카드 */}
-          <Card
+          <StepMiniCard
+            label="단어"
+            value={`${wordCount}개`}
+            active={step === "words"}
             onClick={() => setStep("words")}
-            sx={{
-              flex: 1,
-              borderRadius: 3,
-              cursor: "pointer",
-              border:
-                step === "words" ? "2px solid #1976d2" : "1px solid #eee",
-            }}
-          >
-            <CardContent>
-              <Stack spacing={0.5}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontWeight: 600 }}
-                >
-                  단어
-                </Typography>
-                <Typography variant="h6" fontWeight={800}>
-                  {wordCount}개
-                </Typography>
-
-              </Stack>
-            </CardContent>
-          </Card>
-
-          {/* 문장 카드 */}
-          <Card
+          />
+          <StepMiniCard
+            label="문장"
+            value={`${sentenceCount}개`}
+            active={step === "sentences"}
             onClick={() => setStep("sentences")}
-            sx={{
-              flex: 1,
-              borderRadius: 3,
-              cursor: "pointer",
-              border:
-                step === "sentences" ? "2px solid #1976d2" : "1px solid #eee",
-            }}
-          >
-            <CardContent>
-              <Stack spacing={0.5}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontWeight: 600 }}
-                >
-                  문장
-                </Typography>
-                <Typography variant="h6" fontWeight={800}>
-                  {sentenceCount}개
-                </Typography>
-
-              </Stack>
-            </CardContent>
-          </Card>
-
-          {/* 문법 카드 */}
-          <Card
+          />
+          <StepMiniCard
+            label="문법"
+            value={`${grammarCount}개`}
+            active={step === "grammar"}
             onClick={() => setStep("grammar")}
-            sx={{
-              flex: 1,
-              borderRadius: 3,
-              cursor: "pointer",
-              border:
-                step === "grammar" ? "2px solid #1976d2" : "1px solid #eee",
-            }}
-          >
-            <CardContent>
-              <Stack spacing={0.5}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontWeight: 600 }}
-                >
-                  문법
-                </Typography>
-                <Typography variant="h6" fontWeight={800}>
-                  {grammarCount}개
-                </Typography>
-
-              </Stack>
-            </CardContent>
-          </Card>
-
-          {/* 회화 카드 */}
-          <Card
+          />
+          <StepMiniCard
+            label="회화"
+            value={`${dialogCount}개`}
+            active={step === "dialogs"}
             onClick={() => setStep("dialogs")}
-            sx={{
-              flex: 1,
-              borderRadius: 3,
-              cursor: "pointer",
-              border:
-                step === "dialogs" ? "2px solid #1976d2" : "1px solid #eee",
-            }}
-          >
-            <CardContent>
-              <Stack spacing={0.5}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontWeight: 600 }}
-                >
-                  회화
-                </Typography>
-                <Typography variant="h6" fontWeight={800}>
-                  {dialogCount}개
-                </Typography>
-
-              </Stack>
-            </CardContent>
-          </Card>
-        </Stack>
+          />
+        </Box>
 
         {/* 실제 학습 세션 (step에 따라 교체) */}
         {step === "words" && (
@@ -290,6 +209,45 @@ export default function TodayStudySession() {
           />
         )}
       </Stack>
+    </Box>
+  );
+}
+
+/* ---------------------------------------------------- */
+/*     StepMiniCard: 오늘 공부 4종 한 줄 버튼 스타일     */
+/* ---------------------------------------------------- */
+function StepMiniCard({ label, value, active, onClick }) {
+  return (
+    <Box
+      onClick={onClick}
+      sx={{
+        flex: 1,
+        minWidth: 0,
+        borderRadius: 999,
+        py: 1.1,
+        px: 1,
+        textAlign: "center",
+        cursor: "pointer",
+        bgcolor: active ? "primary.light" : "#F5F7FB",
+        color: active ? "primary.main" : "text.primary",
+        border: "1px solid",
+        borderColor: active ? "primary.main" : "#E2E6F0",
+        transition: "all 0.15s ease-out",
+        "&:hover": {
+          bgcolor: active ? "primary.light" : "#EDF1FB",
+        },
+      }}
+    >
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography
+        variant="subtitle1"
+        fontWeight={800}
+        sx={{ lineHeight: 1.3 }}
+      >
+        {value}
+      </Typography>
     </Box>
   );
 }

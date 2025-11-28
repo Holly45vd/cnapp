@@ -67,9 +67,10 @@ export default function DialogSession({
     setIdx(nextIdx);
   };
 
-  const handleLineSpeak = (zh, ttsText) => {
-    if (!zh && !ttsText) return;
-    speakZh(ttsText || zh);
+  // 🔊 각 대사도 항상 중국어 원문(zh)만 읽도록 고정
+  const handleLineSpeak = (zh) => {
+    if (!zh) return;
+    speakZh(zh);
   };
 
   if (loading) {
@@ -120,9 +121,7 @@ export default function DialogSession({
           <Stack spacing={2}>
             {lines.map((l, i) => {
               const pinyin = l.pinyin || "";
-              const koPron = pinyin
-                ? freeTextPinyinToKorean(pinyin)
-                : "";
+              const koPron = pinyin ? freeTextPinyinToKorean(pinyin) : "";
 
               return (
                 <Box key={i}>
@@ -167,7 +166,7 @@ export default function DialogSession({
                     {/* 한 문장씩 발음 듣기 */}
                     <IconButton
                       size="small"
-                      onClick={() => handleLineSpeak(l.zh, l.audio?.ttsText)}
+                      onClick={() => handleLineSpeak(l.zh)}
                       sx={{
                         mt: 2,
                         bgcolor: "grey.50",
@@ -193,7 +192,7 @@ export default function DialogSession({
         </CardContent>
       </Card>
 
-      {/* 액션 버튼 (아직은 자리만) */}
+      {/* 액션 버튼 (자리만) */}
       <Stack direction="row" spacing={1}>
         <Button fullWidth variant="outlined">🔊 전체 듣기</Button>
         <Button fullWidth variant="outlined">🎙️ 따라읽기</Button>

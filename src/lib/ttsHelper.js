@@ -7,7 +7,6 @@
 export function speakZh(text) {
   if (!text) return;
 
-  // 브라우저 speechSynthesis 사용
   const synth = window.speechSynthesis;
   if (!synth) {
     console.warn("Speech Synthesis not supported.");
@@ -16,38 +15,50 @@ export function speakZh(text) {
 
   const utter = new SpeechSynthesisUtterance(text);
 
-  /**
-   * 🔍 중국어 음성 찾기
-   * zh-CN, zh-TW 둘 다 검색
-   */
-  const voices = synth.getVoices();
-  const zhVoice =
-    voices.find((v) => v.lang === "zh-CN") ||
-    voices.find((v) => v.lang.startsWith("zh")) ||
-    voices.find((v) => v.lang === "zh-TW");
+  const pickVoiceAndSpeak = () => {
+    const voices = synth.getVoices() || [];
 
-  if (zhVoice) {
-    utter.voice = zhVoice;
+    // zh 계열 언어를 최대한 다 잡기
+    const zhVoice =
+      voices.find((v) => v.lang?.toLowerCase() === "zh-cn") ||
+      voices.find((v) => v.lang?.toLowerCase() === "zh-tw") ||
+      voices.find((v) => v.lang?.toLowerCase().startsWith("zh")) ||
+      voices.find((v) => v.lang?.toLowerCase().includes("zh")) ||
+      voices.find((v) => v.name?.toLowerCase().includes("chinese")) ||
+      voices.find((v) => v.lang?.toLowerCase().startsWith("cmn")); // 일부 환경: cmn-Hans-CN 등
+
+    if (zhVoice) {
+      utter.voice = zhVoice;
+    } else {
+      console.warn("⚠️ 중국어 음성을 찾을 수 없음. 기본 음성 사용.");
+    }
+
+    utter.rate = 1;
+    utter.pitch = 1;
+    utter.volume = 1;
+
+    synth.cancel();
+    synth.speak(utter);
+  };
+
+  // voices가 아직 로드 안 된 경우(onvoiceschanged 사용)
+  if (!synth.getVoices().length && "onvoiceschanged" in synth) {
+    const handler = () => {
+      pickVoiceAndSpeak();
+      synth.onvoiceschanged = null; // 한 번만
+    };
+    synth.onvoiceschanged = handler;
+    synth.getVoices(); // 트리거
   } else {
-    console.warn("중국어 음성을 찾을 수 없음. 기본음성 사용.");
+    pickVoiceAndSpeak();
   }
-
-  // 속도·톤 기본 설정
-  utter.rate = 1;
-  utter.pitch = 1;
-  utter.volume = 1;
-
-  synth.cancel(); // 기존 재생 중지
-  synth.speak(utter);
 }
 
 /**
- * 🔊 준비가 안 된 상태에서 voices가 로딩되도록 강제 호출
- * App 초기 실행 시 1~2번 호출하면 voice 목록이 제대로 준비됨
+ * 🔊 (선택) 앱 시작 시 한 번 호출해서 voice 목록 미리 로드
  */
 export function prepareVoices() {
   const synth = window.speechSynthesis;
   if (!synth) return;
-
-  synth.getVoices(); // 초기 로드
+  synth.getVoices();
 }

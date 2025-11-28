@@ -3,14 +3,15 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/cnapp/", // GitHub Pages용
+  base: "/cnapp/",        // repo 이름 cnapp
 
-  // ⚠ CSS 파이프라인 완전 순한맛 모드
   css: {
-    // Vite 6 계열 기준: lightningcss 대신 postcss 사용
+    // 정식 vite 5에서는 이거 없이도 잘 돌아가지만,
+    // 혹시 모를 css 문제 방지용으로 postcss만 쓰게 명시
     transformer: "postcss",
   },
   build: {
-    cssMinify: false, // CSS 최소화도 끔
+    // lightningcss 말고 esbuild로 css minify
+    cssMinify: "esbuild",
   },
 });

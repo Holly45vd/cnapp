@@ -51,7 +51,14 @@ function PillProgress({ known, learn, total }) {
             </Typography>
           </Stack>
 
-          <Box sx={{ height: 8, borderRadius: 999, bgcolor: "grey.100", overflow: "hidden" }}>
+          <Box
+            sx={{
+              height: 8,
+              borderRadius: 999,
+              bgcolor: "grey.100",
+              overflow: "hidden",
+            }}
+          >
             <Box
               sx={{
                 height: "100%",
@@ -129,10 +136,14 @@ export default function WordSession({ wordIds: propWordIds, onDone, mode }) {
     if (!current) return;
 
     if (type === "learn") {
-      setDoneIds((p) => (p.includes(current.wordId) ? p : [...p, current.wordId]));
+      setDoneIds((p) =>
+        p.includes(current.wordId) ? p : [...p, current.wordId]
+      );
     }
     if (type === "known") {
-      setKnownIds((p) => (p.includes(current.wordId) ? p : [...p, current.wordId]));
+      setKnownIds((p) =>
+        p.includes(current.wordId) ? p : [...p, current.wordId]
+      );
     }
 
     const nextIdx = idx + 1;
@@ -157,11 +168,10 @@ export default function WordSession({ wordIds: propWordIds, onDone, mode }) {
     onDone?.({ wordsDone: doneIds, wordsKnown: knownIds });
   };
 
+  // 🔊 항상 중국어 한자만 읽게 고정
   const handleSpeak = () => {
-    if (!current) return;
-    const text = current.audio?.ttsText || current.zh || "";
-    if (!text) return;
-    speakZh(text);
+    if (!current?.zh) return;
+    speakZh(current.zh);
   };
 
   if (loading) {
@@ -253,7 +263,7 @@ export default function WordSession({ wordIds: propWordIds, onDone, mode }) {
           onClick={() => handleChoice("learn")}
           sx={{ fontWeight: 800, borderRadius: 2, py: 1.5 }}
         >
-          다시보기 
+          다시보기
         </Button>
         <Button
           fullWidth

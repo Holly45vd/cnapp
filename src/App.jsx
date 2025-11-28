@@ -1,10 +1,19 @@
-import { useState } from 'react'
+// src/App.jsx
+import { useEffect, useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 
+// 🔊 중국어 TTS용 voice 목록 미리 로딩
+import { prepareVoices } from './lib/ttsHelper'
+
 function App() {
   const [count, setCount] = useState(0)
+
+  // 앱 처음 렌더링될 때 한 번만 실행
+  useEffect(() => {
+    prepareVoices()
+  }, [])
 
   return (
     <>

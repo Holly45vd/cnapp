@@ -34,7 +34,7 @@ export default function SentenceSession({
   const [idx, setIdx] = useState(0);
 
   // ✅ 문장도 학습 / 알고 있음 두 단계로 분리
-  const [doneIds, setDoneIds] = useState([]);   // sentencesDone
+  const [doneIds, setDoneIds] = useState([]); // sentencesDone
   const [knownIds, setKnownIds] = useState([]); // sentencesKnown
 
   useEffect(() => {
@@ -107,9 +107,10 @@ export default function SentenceSession({
     });
   };
 
+  // 🔊 항상 중국어 문장만 읽게 고정
   const handleSpeak = () => {
     if (!current?.zh) return;
-    speakZh(current.audio?.ttsText || current.zh);
+    speakZh(current.zh);
   };
 
   if (loading) {
