@@ -1,62 +1,102 @@
 import { useEffect, useState } from "react";
+import {
+  Card, CardContent, Stack, Typography, TextField, Button, Alert, Divider
+} from "@mui/material";
+import SaveIcon from "@mui/icons-material/Save";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
 export default function JsonEditor({ value, onChange, onSave }) {
   const [text, setText] = useState("");
+  const [parseError, setParseError] = useState("");
 
   useEffect(() => {
     if (value) setText(JSON.stringify(value, null, 2));
     else setText("");
+    setParseError("");
   }, [value]);
 
   const applyChanges = () => {
     try {
       const obj = JSON.parse(text);
       onChange(obj);
+      setParseError("");
     } catch (e) {
-      alert("❌ JSON 파싱 실패 (형식 확인)");
+      setParseError("JSON 파싱 실패. 쉼표/따옴표/중괄호 구조를 확인해줘.");
       console.error(e);
     }
   };
 
   if (!value) {
     return (
-      <div className="bg-white p-4 rounded-xl border text-gray-500">
-        JSON을 업로드하거나 ID로 조회하면 여기에 표시됩니다.
-      </div>
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Alert severity="info" sx={{ borderRadius: 2 }}>
+            JSON을 업로드하거나 ID로 조회하면 여기에 표시됩니다.
+          </Alert>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border space-y-3">
-      <div className="font-semibold">JSON 편집</div>
+    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+      <CardContent>
+        <Stack spacing={1.5}>
+          <Typography fontWeight={800}>JSON 편집</Typography>
+          <Typography variant="body2" color="text.secondary">
+            수정 후 <b>변경 적용(파싱)</b> → <b>Firestore 저장</b> 순서로 진행.
+          </Typography>
 
-      <textarea
-        className="w-full h-96 border rounded-lg p-3 font-mono text-sm"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+          <Divider />
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={applyChanges}
-          className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-        >
-          변경 적용(파싱)
-        </button>
+          <TextField
+            multiline
+            minRows={14}
+            maxRows={20}
+            fullWidth
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="여기에 JSON이 표시됩니다."
+            sx={{
+              "& textarea": {
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 13,
+                lineHeight: 1.6
+              }
+            }}
+          />
 
-        <button
-          type="button"
-          onClick={onSave}
-          className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900"
-        >
-          Firestore 저장
-        </button>
-      </div>
+          {parseError && (
+            <Alert severity="error" sx={{ borderRadius: 2 }}>
+              {parseError}
+            </Alert>
+          )}
 
-      <div className="text-xs text-gray-500">
-        * 저장 전 “변경 적용(파싱)”을 눌러 JSON 유효성 체크하는 습관 들이면 편함.
-      </div>
-    </div>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+            <Button
+              variant="outlined"
+              onClick={applyChanges}
+              startIcon={<CheckCircleIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700 }}
+            >
+              변경 적용(파싱)
+            </Button>
+
+            <Button
+              variant="contained"
+              onClick={onSave}
+              startIcon={<SaveIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700 }}
+            >
+              Firestore 저장
+            </Button>
+          </Stack>
+
+          <Typography variant="caption" color="text.secondary">
+            * 저장 전에 “변경 적용(파싱)”으로 유효성 체크하면 실수 확 줄어듦.
+          </Typography>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

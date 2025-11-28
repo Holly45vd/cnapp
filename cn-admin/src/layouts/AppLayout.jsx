@@ -1,43 +1,87 @@
-import { NavLink, Outlet } from "react-router-dom";
+// /src/layouts/AppLayout.jsx
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import {
+  BottomNavigation,
+  BottomNavigationAction,
+  Paper,
+  Box,
+} from "@mui/material";
+
+import HomeIcon from "@mui/icons-material/Home";
+import AutoStoriesIcon from "@mui/icons-material/AutoStories";
+import ReplayIcon from "@mui/icons-material/Replay";
+import BarChartIcon from "@mui/icons-material/BarChart";
+import PersonIcon from "@mui/icons-material/Person";
 
 export default function AppLayout() {
-  const nav = [
-    { to: "/app", label: "홈" },
-    { to: "/app/words", label: "단어" },
-    { to: "/app/grammar", label: "문법" },
-    { to: "/app/dialogs", label: "회화" },
-    { to: "/app/review", label: "복습" },
-  ];
+  const nav = useNavigate();
+  const location = useLocation();
+
+  // 현재 path → navigation value로 변환
+  const current = (() => {
+    if (location.pathname.startsWith("/app/today")) return "today";
+    if (location.pathname.startsWith("/app/review")) return "review";
+    if (location.pathname.startsWith("/app/history")) return "history";
+    if (location.pathname.startsWith("/app/mypage")) return "mypage";
+    return "home";
+  })();
+
+  const handleChange = (_, value) => {
+    nav(`/app/${value === "home" ? "" : value}`);
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* 상단 헤더 */}
-      <header className="bg-white border-b p-4 flex justify-between items-center">
-        <h1 className="text-xl font-semibold">CN Study</h1>
-      </header>
-
-      {/* 메인 */}
-      <main className="flex-1 p-6">
+    <Box
+      sx={{
+        minHeight: "100vh",
+        pb: 8, // bottom nav height만큼 공간 확보
+        bgcolor: "background.default",
+      }}
+    >
+      {/* Main Content */}
+      <Box sx={{ p: 2 }}>
         <Outlet />
-      </main>
+      </Box>
 
-      {/* 하단 네비게이션 */}
-      <footer className="bg-white border-t p-3 flex justify-around">
-        {nav.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end
-            className={({ isActive }) =>
-              `px-3 py-2 rounded-lg ${
-                isActive ? "bg-black text-white" : "text-gray-600 hover:bg-gray-200"
-              }`
-            }
-          >
-            {n.label}
-          </NavLink>
-        ))}
-      </footer>
-    </div>
+      {/* Bottom Navigation */}
+      <Paper
+        sx={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderRadius: 0,
+        }}
+        elevation={6}
+      >
+        <BottomNavigation value={current} onChange={handleChange}>
+          <BottomNavigationAction
+            value="home"
+            label="홈"
+            icon={<HomeIcon />}
+          />
+          <BottomNavigationAction
+            value="today"
+            label="오늘공부"
+            icon={<AutoStoriesIcon />}
+          />
+          <BottomNavigationAction
+            value="review"
+            label="복습"
+            icon={<ReplayIcon />}
+          />
+          <BottomNavigationAction
+            value="history"
+            label="기록"
+            icon={<BarChartIcon />}
+          />
+          <BottomNavigationAction
+            value="mypage"
+            label="마이"
+            icon={<PersonIcon />}
+          />
+        </BottomNavigation>
+      </Paper>
+    </Box>
   );
 }

@@ -1,46 +1,232 @@
-import { NavLink, Outlet } from "react-router-dom";
+import React from "react";
+import {
+  NavLink,
+  Outlet,
+  useLocation,
+  Link as RouterLink,
+} from "react-router-dom";
 import { logout } from "../firebase/auth";
 
+// MUI
+import {
+  Box,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Typography,
+  List,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  IconButton,
+  Stack,
+  Button,
+} from "@mui/material";
+
+import MenuIcon from "@mui/icons-material/Menu";
+import LogoutIcon from "@mui/icons-material/Logout";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import StorageIcon from "@mui/icons-material/Storage";
+import ArticleIcon from "@mui/icons-material/Article";
+import ForumIcon from "@mui/icons-material/Forum";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+
+const drawerWidth = 240;
+
 export default function AdminLayout() {
+  const location = useLocation();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  // ✅ "어드민 홈" 추가
   const nav = [
-    { to: "/admin/words", label: "단어" },
-    { to: "/admin/sentences", label: "문장" },
-    { to: "/admin/dialogs", label: "회화" },
-    { to: "/admin/grammar", label: "문법" },
+    { to: "/admin", label: "홈", icon: <DashboardIcon fontSize="small" /> },
+    { to: "/admin/words", label: "단어", icon: <StorageIcon fontSize="small" /> },
+    { to: "/admin/sentences", label: "문장", icon: <ArticleIcon fontSize="small" /> },
+    { to: "/admin/dialogs", label: "회화", icon: <ForumIcon fontSize="small" /> },
+    { to: "/admin/grammar", label: "문법", icon: <MenuBookIcon fontSize="small" /> },
   ];
 
-  return (
-    <div className="flex min-h-screen">
-      <aside className="w-56 bg-white border-r p-4 space-y-4">
-        <h1 className="text-xl font-bold">Admin</h1>
+  const handleDrawerToggle = () => setMobileOpen((p) => !p);
 
-        <nav className="flex flex-col gap-2">
-          {nav.map((n) => (
-            <NavLink
+  const drawerContent = (
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Drawer header (클릭하면 /admin 홈) */}
+      <Box
+        component={RouterLink}
+        to="/admin"
+        onClick={() => setMobileOpen(false)}
+        sx={{
+          p: 2,
+          textDecoration: "none",
+          color: "inherit",
+          cursor: "pointer",
+          "&:hover": { bgcolor: "grey.100" },
+        }}
+      >
+        <Typography variant="h6" fontWeight={800}>
+          CN Admin
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          데이터 등록 · 자동매핑 · 관리
+        </Typography>
+      </Box>
+
+      <Divider />
+
+      {/* Nav list */}
+      <List sx={{ px: 1 }}>
+        {nav.map((n) => {
+          // ✅ /admin은 exact match, 나머진 startsWith
+          const active =
+            n.to === "/admin"
+              ? location.pathname === "/admin"
+              : location.pathname.startsWith(n.to);
+
+          return (
+            <ListItemButton
               key={n.to}
+              component={NavLink}
               to={n.to}
-              className={({ isActive }) =>
-                `px-3 py-2 rounded-lg ${
-                  isActive ? "bg-black text-white" : "hover:bg-gray-100"
-                }`
-              }
+              selected={active}
+              onClick={() => setMobileOpen(false)}
+              sx={{
+                borderRadius: 2,
+                my: 0.5,
+                "&.Mui-selected": {
+                  bgcolor: "black",
+                  color: "white",
+                  "& .MuiListItemText-primary": { fontWeight: 800 },
+                },
+                "&.Mui-selected:hover": { bgcolor: "black" },
+              }}
             >
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
+                {n.icon}
+                <ListItemText primary={n.label} />
+              </Stack>
+            </ListItemButton>
+          );
+        })}
+      </List>
 
-        <button
-          onClick={() => logout()}
-          className="text-sm text-gray-600 hover:text-black"
+      <Box sx={{ flex: 1 }} />
+
+      <Divider />
+
+      {/* Logout */}
+      <Box sx={{ p: 2 }}>
+        <Button
+          variant="outlined"
+          fullWidth
+          color="inherit"
+          startIcon={<LogoutIcon />}
+          onClick={logout}
+          sx={{ borderRadius: 2, fontWeight: 700 }}
         >
           로그아웃
-        </button>
-      </aside>
+        </Button>
+      </Box>
+    </Box>
+  );
 
-      <main className="flex-1 p-6 bg-gray-50">
+  return (
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "grey.50" }}>
+      {/* AppBar */}
+      <AppBar
+        position="fixed"
+        elevation={0}
+        sx={{
+          bgcolor: "white",
+          color: "black",
+          borderBottom: "1px solid #eee",
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+        }}
+      >
+        <Toolbar sx={{ gap: 1 }}>
+          {/* Mobile menu button */}
+          <IconButton
+            edge="start"
+            onClick={handleDrawerToggle}
+            sx={{ display: { md: "none" } }}
+          >
+            <MenuIcon />
+          </IconButton>
+
+          {/* AppBar title (클릭하면 /admin 홈) */}
+          <Typography
+            component={RouterLink}
+            to="/admin"
+            variant="h6"
+            fontWeight={800}
+            sx={{
+              textDecoration: "none",
+              color: "inherit",
+              cursor: "pointer",
+              "&:hover": { opacity: 0.7 },
+            }}
+          >
+            Admin
+          </Typography>
+
+          <Typography variant="body2" color="text.secondary">
+            {location.pathname}
+          </Typography>
+
+          <Box sx={{ flex: 1 }} />
+
+          <Button
+            onClick={logout}
+            startIcon={<LogoutIcon />}
+            sx={{ fontWeight: 700 }}
+          >
+            로그아웃
+          </Button>
+        </Toolbar>
+      </AppBar>
+
+      {/* Drawer - desktop */}
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: "none", md: "block" },
+          width: drawerWidth,
+          flexShrink: 0,
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            boxSizing: "border-box",
+            borderRight: "1px solid #eee",
+
+            // ✅ AppBar 높이만큼 위 여백 확보
+            pt: "64px", // 기본 Toolbar height(데스크탑)
+          },
+        }}
+        open
+      >
+        {drawerContent}
+      </Drawer>
+
+      {/* Drawer - mobile */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: "block", md: "none" },
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            pt: "56px", // 모바일 Toolbar height
+          },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+
+      {/* Main */}
+      <Box component="main" sx={{ flex: 1, p: 3 }}>
+        <Toolbar />
         <Outlet />
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

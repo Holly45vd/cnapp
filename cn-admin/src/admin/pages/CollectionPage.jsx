@@ -6,11 +6,45 @@ import JsonUploadBox from "../components/JsonUploadBox";
 import JsonEditor from "../components/JsonEditor";
 import DocIdSearch from "../components/DocIdSearch";
 
+// MUI
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Stack,
+  Divider,
+  Alert,
+  Chip,
+} from "@mui/material";
+
+// ===== id 자동생성 규칙 =====
+function generateId(prefix) {
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `${prefix}${Date.now()}_${rand}`;
+}
+function getPrefixByCollection(collection) {
+  switch (collection) {
+    case "words":
+      return "w_";
+    case "sentences":
+      return "s_";
+    case "dialogs":
+      return "d_";
+    case "grammar":
+      return "g_";
+    case "days":
+      return "day_";
+    default:
+      return "x_";
+  }
+}
+
 export default function CollectionPage({ collection, idKey }) {
   const [currentId, setCurrentId] = useState("");
   const [jsonObj, setJsonObj] = useState(null);
 
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(""); // loading | loaded | saving | saved
   const [error, setError] = useState("");
 
   const titleMap = useMemo(
@@ -67,12 +101,19 @@ export default function CollectionPage({ collection, idKey }) {
       return;
     }
 
-    const idFromObj = obj?.[idKey];
-    const id = idFromObj || currentId;
+    // 1) JSON에 id가 있으면 그거 사용
+    let idFromObj = obj?.[idKey];
+    let id = idFromObj || currentId;
 
+    // 2) 없으면 자동 생성
     if (!id) {
-      setError(`❌ JSON 안에 ${idKey}가 없고, 조회한 ID도 없음`);
-      return;
+      const prefix = getPrefixByCollection(collection);
+      id = generateId(prefix);
+
+      // JSON에도 id 박아주기(연결/재조회 편하게)
+      obj = { ...obj, [idKey]: id };
+      setJsonObj(obj);
+      setCurrentId(id);
     }
 
     setStatus("saving");
@@ -81,7 +122,6 @@ export default function CollectionPage({ collection, idKey }) {
     try {
       const ref = doc(db, collection, id);
 
-      // createdAt / updatedAt 자동 세팅 (있으면 유지)
       const payload = {
         ...obj,
         [idKey]: id,
@@ -101,66 +141,118 @@ export default function CollectionPage({ collection, idKey }) {
     }
   };
 
+  const title = titleMap[collection] || collection;
+
   return (
-    <div className="space-y-6">
-      {/* 헤더 */}
-      <header className="flex items-end justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">
-            {titleMap[collection] || collection} 관리
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            JSON 업로드/조회/수정 후 Firestore에 저장합니다.
-          </p>
-        </div>
+    <Box sx={{ display: "grid", gap: 3 }}>
+      {/* ===== 헤더 ===== */}
+      <Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="h5" fontWeight={800}>
+            {title} 관리
+          </Typography>
+          <Chip size="small" label={collection} />
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          JSON 업로드 / 조회 / 수정 후 Firestore에 저장합니다.
+        </Typography>
+      </Box>
 
-        {currentId && (
-          <div className="text-sm text-gray-500">
-            현재 ID: <span className="font-mono">{currentId}</span>
-          </div>
-        )}
-      </header>
+      {/* ===== 현재 ID 표시 ===== */}
+      {currentId && (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          현재 문서 ID: <b style={{ fontFamily: "monospace" }}>{currentId}</b>
+        </Alert>
+      )}
 
-      {/* ID 조회 */}
-      <DocIdSearch idKey={idKey} onSearch={loadById} />
+      {/* ===== ID 조회 카드 ===== */}
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Stack spacing={1.5}>
+            <Typography fontWeight={700}>ID로 조회</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {idKey}로 기존 문서를 불러옵니다.
+            </Typography>
+            <Divider />
+            {/* 기존 컴포넌트 유지 */}
+            <DocIdSearch idKey={idKey} onSearch={loadById} />
+          </Stack>
+        </CardContent>
+      </Card>
 
-      {/* JSON 업로드 */}
-      <JsonUploadBox
-        idKey={idKey}
-        onLoaded={(obj) => {
-          setError("");
-          setStatus("loaded");
-          setJsonObj(obj);
-          setCurrentId(obj?.[idKey] || "");
-        }}
-      />
+      {/* ===== JSON 업로드 카드 ===== */}
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Stack spacing={1.5}>
+            <Typography fontWeight={700}>JSON 업로드</Typography>
+            <Typography variant="body2" color="text.secondary">
+              파일 업로드 또는 붙여넣기로 JSON을 불러옵니다.
+              <br />
+              {idKey}가 없으면 저장 시 자동으로 생성됩니다.
+            </Typography>
+            <Divider />
+            <JsonUploadBox
+              idKey={idKey}
+              onLoaded={(obj) => {
+                setError("");
+                setStatus("loaded");
+                setJsonObj(obj);
+                setCurrentId(obj?.[idKey] || "");
+              }}
+            />
+          </Stack>
+        </CardContent>
+      </Card>
 
-      {/* JSON 편집기 */}
-      <JsonEditor
-        value={jsonObj}
-        onChange={(obj) => {
-          setJsonObj(obj);
-          if (obj?.[idKey]) setCurrentId(obj[idKey]);
-        }}
-        onSave={() => saveJson(jsonObj)}
-      />
+      {/* ===== JSON 에디터 카드 ===== */}
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Stack spacing={1.5}>
+            <Typography fontWeight={700}>JSON 편집</Typography>
+            <Typography variant="body2" color="text.secondary">
+              로드된 JSON을 수정하고 저장하세요.
+            </Typography>
+            <Divider />
+            <JsonEditor
+              value={jsonObj}
+              onChange={(obj) => {
+                setJsonObj(obj);
+                if (obj?.[idKey]) setCurrentId(obj[idKey]);
+              }}
+              onSave={() => saveJson(jsonObj)}
+            />
+          </Stack>
+        </CardContent>
+      </Card>
 
-      {/* 상태/에러 메시지 */}
-      <footer className="space-y-2">
+      {/* ===== 상태/에러 ===== */}
+      <Box sx={{ display: "grid", gap: 1 }}>
         {status === "loading" && (
-          <div className="text-sm text-gray-600">불러오는 중...</div>
+          <Alert severity="info" sx={{ borderRadius: 2 }}>
+            불러오는 중...
+          </Alert>
         )}
         {status === "saving" && (
-          <div className="text-sm text-gray-600">저장하는 중...</div>
+          <Alert severity="info" sx={{ borderRadius: 2 }}>
+            저장하는 중...
+          </Alert>
         )}
         {status === "saved" && (
-          <div className="text-sm text-green-700">✅ 저장 완료</div>
+          <Alert severity="success" sx={{ borderRadius: 2 }}>
+            ✅ 저장 완료
+          </Alert>
         )}
         {status === "loaded" && !error && (
-          <div className="text-sm text-blue-700">✅ 로드 완료</div>
+          <Alert severity="success" sx={{ borderRadius: 2 }}>
+            ✅ 로드 완료
+          </Alert>
         )}
-        {error && <div className="text-sm text-red-600">{error}</div>}
-      </footer>
-    </div>
+        {error && (
+          <Alert severity="error" sx={{ borderRadius: 2 }}>
+            {error}
+          </Alert>
+        )}
+      </Box>
+    </Box>
   );
 }

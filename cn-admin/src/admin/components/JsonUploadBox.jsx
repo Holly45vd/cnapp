@@ -1,7 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import {
+  Card, CardContent, Stack, Typography, Button,
+  TextField, Alert, Divider, Chip
+} from "@mui/material";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import ContentPasteIcon from "@mui/icons-material/ContentPaste";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 export default function JsonUploadBox({ idKey, onLoaded }) {
   const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
 
   const handleFile = (file) => {
     const reader = new FileReader();
@@ -10,8 +19,9 @@ export default function JsonUploadBox({ idKey, onLoaded }) {
         const obj = JSON.parse(reader.result);
         onLoaded(obj);
         setText(JSON.stringify(obj, null, 2));
+        setError("");
       } catch (e) {
-        alert("❌ JSON 파일 파싱 실패");
+        setError("JSON 파일 파싱 실패. 파일 내용 확인해줘.");
         console.error(e);
       }
     };
@@ -22,60 +32,106 @@ export default function JsonUploadBox({ idKey, onLoaded }) {
     try {
       const obj = JSON.parse(text);
       onLoaded(obj);
+      setError("");
     } catch (e) {
-      alert("❌ 붙여넣은 JSON 파싱 실패");
+      setError("붙여넣은 JSON 파싱 실패. 형식 확인해줘.");
       console.error(e);
     }
   };
 
   const handleClear = () => {
     setText("");
+    setError("");
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border space-y-3">
-      <div className="font-semibold">JSON 등록</div>
+    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+      <CardContent>
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography fontWeight={800}>JSON 등록</Typography>
+            <Chip size="small" label={idKey} />
+          </Stack>
 
-      {/* 파일 업로드 */}
-      <div className="flex items-center gap-3">
-        <input
-          type="file"
-          accept=".json,application/json"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-          }}
-        />
-        <button
-          type="button"
-          onClick={handleClear}
-          className="text-sm text-gray-500 hover:text-black"
-        >
-          입력 지우기
-        </button>
-      </div>
+          <Typography variant="body2" color="text.secondary">
+            파일 업로드 또는 붙여넣기로 JSON을 불러옵니다.  
+            최상단에 <b>{idKey}</b>가 없으면 저장 시 자동 생성됩니다.
+          </Typography>
 
-      {/* JSON 붙여넣기 텍스트 */}
-      <textarea
-        className="w-full h-48 border rounded-lg p-3 font-mono text-sm"
-        placeholder={`JSON 붙여넣기. ${idKey} 필드가 있으면 자동으로 ID가 됩니다.`}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+          <Divider />
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={handlePasteLoad}
-          className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black"
-        >
-          붙여넣은 JSON 불러오기
-        </button>
-      </div>
+          {/* 파일 업로드 라인 */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+            <Button
+              component="label"
+              variant="outlined"
+              startIcon={<UploadFileIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700 }}
+            >
+              JSON 파일 선택
+              <input
+                ref={fileRef}
+                type="file"
+                hidden
+                accept=".json,application/json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                }}
+              />
+            </Button>
 
-      <div className="text-xs text-gray-500">
-        * JSON 최상단에 <b>{idKey}</b>가 있으면 그 값으로 문서 ID를 씁니다.
-      </div>
-    </div>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={handleClear}
+              startIcon={<DeleteOutlineIcon />}
+              sx={{ borderRadius: 2 }}
+            >
+              입력 지우기
+            </Button>
+          </Stack>
+
+          {/* 붙여넣기 박스 */}
+          <TextField
+            multiline
+            minRows={8}
+            fullWidth
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`JSON 붙여넣기. ${idKey} 필드가 있으면 그 값이 문서 ID가 됩니다.`}
+            sx={{
+              "& textarea": {
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 13,
+                lineHeight: 1.6
+              }
+            }}
+          />
+
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              onClick={handlePasteLoad}
+              startIcon={<ContentPasteIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700 }}
+            >
+              붙여넣은 JSON 불러오기
+            </Button>
+          </Stack>
+
+          {error && (
+            <Alert severity="error" sx={{ borderRadius: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Typography variant="caption" color="text.secondary">
+            * JSON 최상단에 <b>{idKey}</b>가 있으면 그 값으로 문서 ID를 씁니다.
+          </Typography>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

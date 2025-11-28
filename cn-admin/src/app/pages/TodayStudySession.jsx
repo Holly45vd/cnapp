@@ -1,0 +1,251 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import WordSession from "./WordSession";
+import GrammarSession from "./GrammarSession";
+import DialogSession from "./DialogSession";
+
+// MUI
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Stepper,
+  Step,
+  StepLabel,
+  LinearProgress,
+  Button,
+  Stack,
+} from "@mui/material";
+
+export default function TodayStudySession() {
+  const nav = useNavigate();
+  const { state } = useLocation();
+  const routine = state?.routine;
+
+  const [step, setStep] = useState("words"); // "words" | "grammar" | "dialogs"
+  const [wordResult, setWordResult] = useState(null);
+  const [grammarResult, setGrammarResult] = useState(null);
+
+  const [startedAt] = useState(() => Date.now());
+  const durationSec = useMemo(
+    () => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
+    [startedAt, step]
+  );
+
+  useEffect(() => {
+    if (!routine) return;
+    setStep("words");
+  }, [routine]);
+
+  if (!routine) {
+    return (
+      <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 2 }}>
+        <Card>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Typography variant="h6" fontWeight={800}>
+                오늘 루틴이 없습니다
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                홈으로 돌아가서 “오늘 공부”를 다시 시작해줘.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => nav("/app")}
+                sx={{ borderRadius: 2, fontWeight: 800 }}
+              >
+                홈으로
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  }
+
+  const steps = [
+    { key: "words", label: "단어" },
+    { key: "grammar", label: "문법" },
+    { key: "dialogs", label: "회화" },
+  ];
+  const currentIdx = steps.findIndex((s) => s.key === step);
+
+  const wordCount = routine.words?.length ?? 0;
+  const grammarCount = routine.grammar?.length ?? 0;
+  const dialogCount = routine.dialogs?.length ?? 0;
+
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
+      <Stack spacing={2} sx={{ p: 1 }}>
+        {/* ✅ 상단 진행 헤더 (여기서만 "오늘 공부" 표시) */}
+        <Card>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Typography fontWeight={800}>오늘 공부</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {currentIdx + 1} / {steps.length}
+                </Typography>
+              </Stack>
+
+              <Stepper activeStep={currentIdx} alternativeLabel>
+                {steps.map((s) => (
+                  <Step key={s.key}>
+                    <StepLabel>{s.label}</StepLabel>
+                  </Step>
+                ))}
+              </Stepper>
+
+              <LinearProgress
+                variant="determinate"
+                value={((currentIdx + 1) / steps.length) * 100}
+                sx={{ height: 8, borderRadius: 999 }}
+              />
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* ✅ 오늘의 단어 / 문법 / 회화 카드들을 한 줄에 모두 보여주기 */}
+        <Stack
+          spacing={1.5}
+          direction={{ xs: "column", md: "row" }}
+          sx={{ mt: 0.5 }}
+        >
+          <Card
+            onClick={() => setStep("words")}
+            sx={{
+              flex: 1,
+              borderRadius: 3,
+              cursor: "pointer",
+              border:
+                step === "words" ? "2px solid #1976d2" : "1px solid #eee",
+            }}
+          >
+            <CardContent>
+              <Stack spacing={0.5}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontWeight: 600 }}
+                >
+                  오늘의 단어
+                </Typography>
+                <Typography variant="h6" fontWeight={800}>
+                  {wordCount}개
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  신규/복습 단어 학습
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card
+            onClick={() => setStep("grammar")}
+            sx={{
+              flex: 1,
+              borderRadius: 3,
+              cursor: "pointer",
+              border:
+                step === "grammar" ? "2px solid #1976d2" : "1px solid #eee",
+            }}
+          >
+            <CardContent>
+              <Stack spacing={0.5}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontWeight: 600 }}
+                >
+                  오늘의 문법
+                </Typography>
+                <Typography variant="h6" fontWeight={800}>
+                  {grammarCount}개
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  패턴/설명 + 예문
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card
+            onClick={() => setStep("dialogs")}
+            sx={{
+              flex: 1,
+              borderRadius: 3,
+              cursor: "pointer",
+              border:
+                step === "dialogs" ? "2px solid #1976d2" : "1px solid #eee",
+            }}
+          >
+            <CardContent>
+              <Stack spacing={0.5}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontWeight: 600 }}
+                >
+                  오늘의 회화
+                </Typography>
+                <Typography variant="h6" fontWeight={800}>
+                  {dialogCount}개
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  2줄 대화 / 듣기 / 따라읽기
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Stack>
+
+        {/* 아래엔 실제 학습 세션 하나만 표시 (step에 따라 교체) */}
+        {step === "words" && (
+          <WordSession
+            wordIds={routine.words}
+            mode="today"
+            onDone={(result) => {
+              setWordResult(result);
+              setStep("grammar");
+            }}
+          />
+        )}
+
+        {step === "grammar" && (
+          <GrammarSession
+            grammarIds={routine.grammar}
+            mode="today"
+            onDone={(result) => {
+              setGrammarResult(result);
+              setStep("dialogs");
+            }}
+          />
+        )}
+
+        {step === "dialogs" && (
+          <DialogSession
+            dialogIds={routine.dialogs}
+            mode="today"
+            onDone={(result) => {
+              nav("/app/today/done", {
+                state: {
+                  routine,
+                  wordResult,
+                  grammarResult,
+                  dialogResult: result,
+                  durationSec,
+                },
+              });
+            }}
+          />
+        )}
+      </Stack>
+    </Box>
+  );
+}

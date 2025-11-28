@@ -1,29 +1,229 @@
-import { Link } from "react-router-dom";
+// src/app/pages/DialogSession.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { listCollection } from "../../firebase/db";
+import { freeTextPinyinToKorean } from "../../lib/pinyinKorean";
+import { speakZh } from "../../lib/ttsHelper";
 
-export default function DialogSession() {
+// MUI
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Stack,
+  Button,
+  Chip,
+  LinearProgress,
+  IconButton,
+} from "@mui/material";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+
+export default function DialogSession({
+  dialogIds: propDialogIds,
+  onDone,
+  mode,
+}) {
+  const { state } = useLocation();
+  const dialogIds = propDialogIds || state?.routine?.dialogs || [];
+
+  const [allDialogs, setAllDialogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [idx, setIdx] = useState(0);
+
+  const [doneIds, setDoneIds] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const dialogs = await listCollection("dialogs");
+        setAllDialogs(dialogs);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const sessionDialogs = useMemo(() => {
+    if (!dialogIds?.length) return [];
+    const idSet = new Set(dialogIds);
+    return allDialogs.filter((d) => idSet.has(d.dialogId));
+  }, [allDialogs, dialogIds]);
+
+  const current = sessionDialogs[idx];
+  const lines = current?.lines || [];
+
+  const handleDoneOne = () => {
+    if (!current) return;
+    const newDone = [...doneIds, current.dialogId];
+    setDoneIds(newDone);
+
+    const nextIdx = idx + 1;
+    if (nextIdx >= sessionDialogs.length) {
+      onDone?.({ dialogsDone: newDone });
+      return;
+    }
+    setIdx(nextIdx);
+  };
+
+  const handleLineSpeak = (zh, ttsText) => {
+    if (!zh && !ttsText) return;
+    speakZh(ttsText || zh);
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          회화 불러오는 중...
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (!sessionDialogs.length) {
+    return (
+      <Box sx={{ p: 2 }}>
+        {mode !== "today" && (
+          <Typography variant="h6" fontWeight={800}>
+            오늘 공부 - 회화
+          </Typography>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          오늘 회화가 없습니다.
+        </Typography>
+      </Box>
+    );
+  }
+
+  const content = (
+    <Stack spacing={2}>
+      {/* today 모드가 아니면 상단 헤더 노출 */}
+      {mode !== "today" && (
+        <Card>
+          <CardContent sx={{ display: "flex", justifyContent: "space-between" }}>
+            <Box>
+              <Typography fontWeight={800}>오늘 공부 - 회화</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {idx + 1} / {sessionDialogs.length}
+              </Typography>
+            </Box>
+            {current?.topic && <Chip size="small" label={current.topic} />}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 회화 카드 */}
+      <Card sx={{ borderRadius: 3 }}>
+        <CardContent sx={{ py: 3 }}>
+          <Stack spacing={2}>
+            {lines.map((l, i) => {
+              const pinyin = l.pinyin || "";
+              const koPron = pinyin
+                ? freeTextPinyinToKorean(pinyin)
+                : "";
+
+              return (
+                <Box key={i}>
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    spacing={1}
+                  >
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {l.role || (i === 0 ? "A" : "B")}
+                      </Typography>
+                      <Typography fontWeight={700} sx={{ mt: 0.3 }}>
+                        {l.zh}
+                      </Typography>
+                      {pinyin && (
+                        <Typography variant="body2" color="text.secondary">
+                          {pinyin}
+                        </Typography>
+                      )}
+                      {koPron && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 0.2 }}
+                        >
+                          {koPron}
+                        </Typography>
+                      )}
+                      {l.ko && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mt: 0.3 }}
+                        >
+                          {l.ko}
+                        </Typography>
+                      )}
+                    </Box>
+
+                    {/* 한 문장씩 발음 듣기 */}
+                    <IconButton
+                      size="small"
+                      onClick={() => handleLineSpeak(l.zh, l.audio?.ttsText)}
+                      sx={{
+                        mt: 2,
+                        bgcolor: "grey.50",
+                        "&:hover": { bgcolor: "grey.100" },
+                      }}
+                    >
+                      <VolumeUpIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                </Box>
+              );
+            })}
+
+            <LinearProgress
+              variant="determinate"
+              value={((idx + 1) / sessionDialogs.length) * 100}
+              sx={{ height: 6, borderRadius: 999, mt: 1 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {idx + 1} / {sessionDialogs.length}
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* 액션 버튼 (아직은 자리만) */}
+      <Stack direction="row" spacing={1}>
+        <Button fullWidth variant="outlined">🔊 전체 듣기</Button>
+        <Button fullWidth variant="outlined">🎙️ 따라읽기</Button>
+        <Button fullWidth variant="outlined">📌 저장</Button>
+      </Stack>
+
+      {/* 완료 */}
+      <Button
+        variant="contained"
+        onClick={handleDoneOne}
+        sx={{ fontWeight: 800, borderRadius: 2, py: 1.5 }}
+      >
+        회화 완료
+      </Button>
+
+      {/* 취소 */}
+      <Button
+        onClick={() => onDone?.({ dialogsDone: doneIds })}
+        sx={{ color: "text.secondary" }}
+      >
+        실행 취소
+      </Button>
+    </Stack>
+  );
+
+  if (mode === "today") return content;
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold">회화</h2>
-      <p className="text-gray-600">
-        (더미 화면) 나중에 Day.dialogIds 불러와서 2줄 회화/듣기/따라읽기
-      </p>
-
-      <div className="bg-white p-5 rounded-xl border space-y-3">
-        <div>
-          <div className="text-sm text-gray-500">A</div>
-          <div className="text-lg">你今天要去办公室吗？</div>
-          <div className="text-gray-600 text-sm">Nǐ jīntiān yào qù bàngōngshì ma?</div>
-        </div>
-        <div>
-          <div className="text-sm text-gray-500">B</div>
-          <div className="text-lg">不，我在家工作。</div>
-          <div className="text-gray-600 text-sm">Bù, wǒ zàijiā gōngzuò.</div>
-        </div>
-      </div>
-
-      <Link to="/app" className="text-sm text-gray-500 hover:text-black">
-        ← 홈으로
-      </Link>
-    </div>
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 2 }}>
+      {content}
+    </Box>
   );
 }
