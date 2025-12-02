@@ -191,14 +191,7 @@ export default function DialogSession({
           </Stack>
         </CardContent>
       </Card>
-
-      {/* 액션 버튼 (자리만) */}
-      <Stack direction="row" spacing={1}>
-        <Button fullWidth variant="outlined">🔊 전체 듣기</Button>
-        <Button fullWidth variant="outlined">🎙️ 따라읽기</Button>
-        <Button fullWidth variant="outlined">📌 저장</Button>
-      </Stack>
-
+      
       {/* 완료 */}
       <Button
         variant="contained"

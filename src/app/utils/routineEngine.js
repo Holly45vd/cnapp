@@ -39,7 +39,7 @@ function pickExceptRecent(pool, n, recentIds) {
 // -----------------------------
 // 3) 단어와 연결된 문장을 우선 선택하는 함수
 //    - 오늘 단어와 연결된 문장 우선
-//    - 부족하면 전체 문장에서 채워서 "n개 맞추기" 시도
+//    - 부족하면 전체 문장에서 채워서 "n개 맞추기"
 // -----------------------------
 function pickSentencesForWords(pools, todayWordIds, n, recentIds) {
   const full = Array.isArray(pools.sentences) ? pools.sentences : [];
@@ -75,9 +75,7 @@ function pickSentencesForWords(pools, todayWordIds, n, recentIds) {
   const need = n - picked.length;
 
   if (need > 0 && rest.length > 0) {
-    picked = picked.concat(
-      sampleSize(rest, Math.min(need, rest.length))
-    );
+    picked = picked.concat(sampleSize(rest, Math.min(need, rest.length)));
   }
 
   return picked;
@@ -92,9 +90,10 @@ export function buildRoutineFromHistory(
   options = {}
 ) {
   const {
-    wordCount = 6,
-    sentenceCount = 3,
-    grammarCount = 1,
+    // ✅ 하루 기준: 단어 9 / 문장 9 / 문법 2 / 회화 1
+    wordCount = 9,
+    sentenceCount = 9,
+    grammarCount = 2,
     dialogCount = 1,
   } = options;
 

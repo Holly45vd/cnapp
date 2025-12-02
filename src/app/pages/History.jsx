@@ -1,7 +1,14 @@
+// src/app/pages/History.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../providers/AuthProvider";
-import { listUserHistoryAll } from "../../firebase/db";
-import { getWeekDateKeys } from "../../shared/utils/date";
+import {
+  listUserHistoryAll,
+  listUserHistoryRange,
+} from "../../firebase/db";
+import {
+  getWeekDateKeys,
+  getLast7DateKeys,
+} from "../../shared/utils/date";
 
 // MUI
 import {
@@ -13,10 +20,16 @@ import {
   Chip,
   Grid,
   LinearProgress,
+  Tabs,
+  Tab,
 } from "@mui/material";
+
 import BarChartIcon from "@mui/icons-material/BarChart";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import TodayIcon from "@mui/icons-material/Today";
+
+// 🔥 Weekly 상세 리스트 (지난 7일)
+import WeeklyHistorySection from "../components/WeeklyHistorySection";
 
 export default function History() {
   const { user } = useAuth();
@@ -38,13 +51,13 @@ export default function History() {
     })();
   }, [user]);
 
-  // -------------------------------
-  // 🔥 연속 학습 스트릭 계산 (전체 기간 기준)
-  // -------------------------------
+  // -----------------------------------
+  // 🔥 연속 학습 streak 계산
+  // -----------------------------------
   const computeStreak = (docs) => {
     if (!docs.length) return 0;
 
-    // dateKey만 추출 후 최신→과거 정렬
+    // 최신→과거 dateKey 정렬
     const keys = docs
       .map((d) => d.dateKey)
       .sort((a, b) => b.localeCompare(a));
@@ -54,34 +67,33 @@ export default function History() {
     let streak = 0;
     let cursor = new Date();
 
-    const dateKeyOf = (date) => date.toISOString().slice(0, 10);
+    const toKey = (date) => date.toISOString().slice(0, 10);
 
-    const prevDate = (date) => {
+    const prev = (date) => {
       const d = new Date(date);
       d.setDate(d.getDate() - 1);
       return d;
     };
 
     while (true) {
-      const key = dateKeyOf(cursor);
+      const key = toKey(cursor);
       if (keysSet.has(key)) {
         streak++;
-        cursor = prevDate(cursor);
+        cursor = prev(cursor);
       } else {
         break;
       }
     }
-
     return streak;
   };
 
-  // -------------------------------
-  // 통계 처리
-  // -------------------------------
+  // -----------------------------------
+  // 📊 통계 계산
+  // -----------------------------------
   const stats = useMemo(() => {
     const byKey = new Map(docs.map((d) => [d.dateKey, d]));
 
-    // 이번 주 데이터
+    // 이번 주
     const weekDocs = weekKeys.map((k) => byKey.get(k)).filter(Boolean);
     const weekDone = weekDocs.length;
 
@@ -102,8 +114,8 @@ export default function History() {
       (s, d) => s + (d.dialogsDone?.length || 0),
       0
     );
-    const totalDays = docs.length;
 
+    const totalDays = docs.length;
     const streak = computeStreak(docs);
 
     return {
@@ -118,30 +130,33 @@ export default function History() {
   }, [docs, weekKeys]);
 
   const weekGoal = 7;
-  const rawWeekPct = (stats.weekDone / weekGoal) * 100;
-  const weekPct = Math.max(0, Math.min(100, Math.round(rawWeekPct)));
+  const weekPct = Math.round((stats.weekDone / weekGoal) * 100);
 
   if (loading) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 3 }}>
+      <Box sx={{ minHeight: "100vh", p: 3 }}>
         <Typography>기록 불러오는 중...</Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
+    <Box sx={{ minHeight: "100vh", p: 1 }}>
       <Stack spacing={2.5} sx={{ p: 1 }}>
+
+        {/* 헤더 */}
         <Stack spacing={0.5}>
           <Typography variant="h5" fontWeight={800}>
             학습 기록
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {user?.displayName || user?.email?.split("@")?.[0]}님의 히스토리
+            {user?.displayName || user?.email?.split("@")[0]}님의 히스토리
           </Typography>
         </Stack>
 
-        {/* 이번주 */}
+        {/* --------------------- */}
+        {/* 이번 주 학습 요약 */}
+        {/* --------------------- */}
         <Card>
           <CardContent>
             <Stack spacing={1.5}>
@@ -153,10 +168,7 @@ export default function History() {
 
               <Grid container spacing={1.5}>
                 <Grid item xs={6}>
-                  <MiniStat
-                    label="학습일"
-                    value={`${stats.weekDone} / ${weekGoal}`}
-                  />
+                  <MiniStat label="학습일" value={`${stats.weekDone} / 7`} />
                 </Grid>
                 <Grid item xs={6}>
                   <MiniStat label="달성률" value={`${weekPct}%`} />
@@ -172,7 +184,9 @@ export default function History() {
           </CardContent>
         </Card>
 
-        {/* 연속 학습 */}
+        {/* --------------------- */}
+        {/* 연속 학습 streak */}
+        {/* --------------------- */}
         <Card>
           <CardContent>
             <Stack direction="row" spacing={1.2} alignItems="center">
@@ -194,7 +208,9 @@ export default function History() {
           </CardContent>
         </Card>
 
-        {/* 누적 */}
+        {/* --------------------- */}
+        {/* 누적 성과 */}
+        {/* --------------------- */}
         <Card>
           <CardContent>
             <Stack spacing={1.5}>
@@ -225,11 +241,24 @@ export default function History() {
             </Stack>
           </CardContent>
         </Card>
+
+        {/* --------------------- */}
+        {/* 지난 7일 상세 기록 */}
+        {/* --------------------- */}
+        <Card>
+          <CardContent>
+            <WeeklyHistorySection />
+          </CardContent>
+        </Card>
+
       </Stack>
     </Box>
   );
 }
 
+// --------------------------------
+// 🔹 MiniStat 컴포넌트
+// --------------------------------
 function MiniStat({ label, value }) {
   return (
     <Box

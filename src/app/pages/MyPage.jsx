@@ -212,24 +212,7 @@ export default function MyPage() {
           </CardContent>
         </Card>
 
-        {/* 목표/학습 설정 (더미) */}
-        <Card>
-          <CardContent>
-            <Stack spacing={1.5}>
-              <Typography fontWeight={800}>학습 목표</Typography>
-              <Typography variant="body2" color="text.secondary">
-                지금은 기본 루틴(단어/문법/회화)으로 진행 중.<br />
-              </Typography>
-
-              <Stack direction="row" spacing={1}>
-                <Chip size="small" label="단어 6" />
-                <Chip size="small" label="문법 1" />
-                <Chip size="small" label="회화 2" />
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-
+       
         {/* 알림 설정 (더미) */}
         <Card>
           <CardContent>

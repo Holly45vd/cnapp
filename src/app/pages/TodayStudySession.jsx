@@ -1,6 +1,6 @@
 // src/app/pages/TodayStudySession.jsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import WordSession from "./WordSession";
@@ -32,12 +32,10 @@ export default function TodayStudySession() {
   const [wordResult, setWordResult] = useState(null);
   const [sentenceResult, setSentenceResult] = useState(null);
   const [grammarResult, setGrammarResult] = useState(null);
+  const [dialogResult, setDialogResult] = useState(null);
 
+  // ⏱ 시작 시각 기록 → 마지막에 durationSec 계산
   const [startedAt] = useState(() => Date.now());
-  const durationSec = useMemo(
-    () => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
-    [startedAt, step]
-  );
 
   useEffect(() => {
     if (!routine) return;
@@ -82,6 +80,33 @@ export default function TodayStudySession() {
   const sentenceCount = routine.sentences?.length ?? 0;
   const grammarCount = routine.grammar?.length ?? 0;
   const dialogCount = routine.dialogs?.length ?? 0;
+
+  // ✅ Done 페이지로 이동 + durationSec 계산 + 기본값 보정
+  const goDonePage = (lastDialogResult) => {
+    const durationSec = Math.max(
+      0,
+      Math.floor((Date.now() - startedAt) / 1000)
+    );
+
+    const safeWordResult = wordResult || { wordsDone: [], wordsKnown: [] };
+    const safeSentenceResult =
+      sentenceResult || { sentencesDone: [], sentencesKnown: [] };
+    const safeGrammarResult =
+      grammarResult || { grammarDone: [], grammarKnown: [] };
+    const safeDialogResult =
+      lastDialogResult || dialogResult || { dialogsDone: [], dialogsKnown: [] };
+
+    nav("/app/today/done", {
+      state: {
+        routine,
+        wordResult: safeWordResult,
+        sentenceResult: safeSentenceResult,
+        grammarResult: safeGrammarResult,
+        dialogResult: safeDialogResult,
+        durationSec,
+      },
+    });
+  };
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
@@ -195,16 +220,8 @@ export default function TodayStudySession() {
             dialogIds={routine.dialogs}
             mode="today"
             onDone={(result) => {
-              nav("/app/today/done", {
-                state: {
-                  routine,
-                  wordResult,
-                  sentenceResult,
-                  grammarResult,
-                  dialogResult: result,
-                  durationSec,
-                },
-              });
+              setDialogResult(result);
+              goDonePage(result);
             }}
           />
         )}

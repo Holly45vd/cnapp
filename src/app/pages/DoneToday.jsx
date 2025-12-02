@@ -1,9 +1,9 @@
+// src/app/pages/DoneToday.jsx
 import { useLocation, useNavigate } from "react-router-dom";
 import { saveUserHistory } from "../../firebase/db";
 import { useAuth } from "../../providers/AuthProvider";
 import { toDateKey } from "../../shared/utils/date";
 
-// MUI
 import {
   Box,
   Card,
@@ -12,9 +12,8 @@ import {
   Stack,
   Button,
   Chip,
-  LinearProgress,
-  IconButton,
   Grid,
+  IconButton,
 } from "@mui/material";
 
 import CloseIcon from "@mui/icons-material/Close";
@@ -49,42 +48,71 @@ export default function DoneToday() {
 
   const wordsDone = wordResult?.wordsDone || [];
   const wordsKnown = wordResult?.wordsKnown || [];
+
   const grammarDone = grammarResult?.grammarDone || [];
+  const grammarKnown = grammarResult?.grammarKnown || [];
+
   const dialogsDone = dialogResult?.dialogsDone || [];
+  const dialogsKnown = dialogResult?.dialogsKnown || [];
+
   const sentencesDone = sentenceResult?.sentencesDone || [];
+  const sentencesKnown = sentenceResult?.sentencesKnown || [];
 
   const totalLearn =
-    wordsDone.length + grammarDone.length + dialogsDone.length + sentencesDone.length;
-  const totalKnown = wordsKnown.length;
+    wordsDone.length +
+    grammarDone.length +
+    dialogsDone.length +
+    sentencesDone.length;
 
-const totalGoal =
-  (routine.words?.length || 0) +
-  (routine.sentences?.length || 0) +
-  (routine.grammar?.length || 0) +
-  (routine.dialogs?.length || 0);
+  const totalKnown =
+    wordsKnown.length +
+    grammarKnown.length +
+    dialogsKnown.length +
+    sentencesKnown.length;
 
-  const learnedPct = totalGoal ? Math.round((totalLearn / totalGoal) * 100) : 0;
-  const knownPct = totalGoal ? Math.round((totalKnown / totalGoal) * 100) : 0;
+  const totalGoal =
+    (routine.words?.length || 0) +
+    (routine.sentences?.length || 0) +
+    (routine.grammar?.length || 0) +
+    (routine.dialogs?.length || 0);
+
+  const learnedPct = totalGoal
+    ? Math.round((totalLearn / totalGoal) * 100)
+    : 0;
+  const knownPct = totalGoal
+    ? Math.round((totalKnown / totalGoal) * 100)
+    : 0;
 
   const handleSaveAndGoHome = async () => {
+    if (!user) return;
+
     await saveUserHistory(user.uid, dateKey, {
       wordsDone,
       wordsKnown,
       grammarDone,
+      grammarKnown,
       dialogsDone,
+      dialogsKnown,
       sentencesDone,
+      sentencesKnown,
       durationSec,
     });
+
     nav("/app", { replace: true });
   };
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
       <Stack spacing={2.5} sx={{ p: 1 }}>
-        {/* 상단 완료 */}
+        {/* 상단 완료 카드 */}
         <Card>
           <CardContent>
-            <Stack spacing={2} alignItems="center" textAlign="center" sx={{ position: "relative" }}>
+            <Stack
+              spacing={2}
+              alignItems="center"
+              textAlign="center"
+              sx={{ position: "relative" }}
+            >
               <IconButton
                 onClick={handleSaveAndGoHome}
                 sx={{ position: "absolute", left: 0, top: 0 }}
@@ -143,7 +171,7 @@ const totalGoal =
           </Grid>
         </Grid>
 
-        {/* 진행바 */}
+        {/* 진행바 카드 */}
         <Card>
           <CardContent>
             <Stack spacing={1.2}>
@@ -162,7 +190,11 @@ const totalGoal =
                   variant="outlined"
                   sx={{ fontWeight: 700 }}
                 />
-                <Typography variant="caption" color="text.secondary" sx={{ ml: "auto" }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ ml: "auto" }}
+                >
                   {totalGoal} 목표
                 </Typography>
               </Stack>
@@ -171,9 +203,19 @@ const totalGoal =
                 <Typography variant="caption" color="text.secondary">
                   알고있다 {knownPct}% · 학습 {learnedPct}%
                 </Typography>
-                <Box sx={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", bgcolor: "grey.100" }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    height: 10,
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    bgcolor: "grey.100",
+                  }}
+                >
                   <Box sx={{ width: `${knownPct}%`, bgcolor: "primary.main" }} />
-                  <Box sx={{ width: `${learnedPct}%`, bgcolor: "secondary.main" }} />
+                  <Box
+                    sx={{ width: `${learnedPct}%`, bgcolor: "secondary.main" }}
+                  />
                 </Box>
               </Stack>
             </Stack>

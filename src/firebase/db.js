@@ -7,8 +7,9 @@ import {
   getDocs,
   doc,
   setDoc,
+  getDoc,
   serverTimestamp,
-  where, // ✅ 추가
+  where,
 } from "firebase/firestore";
 
 import { db } from "./firebase";
@@ -17,6 +18,7 @@ import { db } from "./firebase";
 export async function listCollection(colName) {
   const colRef = collection(db, colName);
   const snap = await getDocs(colRef);
+  // 기존 로직 유지 (id가 필요하면 나중에 여기서 바꾸면 됨)
   return snap.docs.map((d) => d.data());
 }
 
@@ -32,20 +34,60 @@ export async function listUserHistoryRecent(uid, n = 7) {
 }
 
 /**
- * 오늘 학습 결과 저장
- * dateKey = "YYYY-MM-DD"
+ * 오늘 학습 결과 저장 (누적 저장용)
+ *  - users/{uid}/studyHistory/{dateKey}
+ *  - 배열 필드는 기존 값 + 새 값 합쳐서 unique
+ *  - durationSec 은 누적
+ *
+ *  payload 예:
+ *  {
+ *    wordsDone: [],
+ *    wordsKnown: [],
+ *    sentencesDone: [],
+ *    sentencesKnown: [],
+ *    grammarDone: [],
+ *    grammarKnown: [],
+ *    dialogsDone: [],
+ *    dialogsKnown: [],
+ *    durationSec: 123
+ *  }
  */
 export async function saveUserHistory(uid, dateKey, payload) {
   const ref = doc(db, "users", uid, "studyHistory", dateKey);
-  await setDoc(
-    ref,
-    {
-      dateKey,
-      ...payload,
-      completedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const snap = await getDoc(ref);
+
+  const prev = snap.exists() ? snap.data() : {};
+
+  const mergeArr = (oldArr = [], newArr = []) => {
+    if (!Array.isArray(oldArr)) oldArr = [];
+    if (!Array.isArray(newArr)) newArr = [];
+    // 새 배열이 비어 있어도 기존 유지하고 싶으면 아래 if는 주석 처리하지 말고 그대로 둔다
+    if (newArr.length === 0) return oldArr;
+    return Array.from(new Set([...oldArr, ...newArr]));
+  };
+
+  const next = {
+    dateKey,
+
+    // 배열 누적
+    wordsDone: mergeArr(prev.wordsDone, payload.wordsDone),
+    wordsKnown: mergeArr(prev.wordsKnown, payload.wordsKnown),
+    sentencesDone: mergeArr(prev.sentencesDone, payload.sentencesDone),
+    sentencesKnown: mergeArr(prev.sentencesKnown, payload.sentencesKnown),
+    grammarDone: mergeArr(prev.grammarDone, payload.grammarDone),
+    grammarKnown: mergeArr(prev.grammarKnown, payload.grammarKnown),
+    dialogsDone: mergeArr(prev.dialogsDone, payload.dialogsDone),
+    dialogsKnown: mergeArr(prev.dialogsKnown, payload.dialogsKnown),
+
+    // 시간 / 메타 정보
+    durationSec: (prev.durationSec || 0) + (payload?.durationSec || 0),
+
+    createdAt: prev.createdAt || serverTimestamp(),
+    completedAt: serverTimestamp(), // 마지막 완료 시각
+    updatedAt: serverTimestamp(),
+  };
+
+  await setDoc(ref, next); // merge 옵션 불필요 (우리가 직접 병합)
 }
 
 /** users/{uid}/studyHistory 전체 가져오기 */

@@ -3,7 +3,11 @@ import { useAuth } from "../../providers/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import { logout } from "../../firebase/auth";
 import { buildRoutineFromHistory } from "../utils/routineEngine";
-import { listCollection, listUserHistoryRecent } from "../../firebase/db";
+import {
+  listCollection,
+  listUserHistoryRange,
+} from "../../firebase/db";
+import { toDateKey } from "../../shared/utils/date";
 
 // MUI
 import {
@@ -15,13 +19,12 @@ import {
   Button,
   Tabs,
   Tab,
-  Grid,
-  Chip,
-  LinearProgress,
   Avatar,
   IconButton,
   Skeleton,
   Alert,
+  LinearProgress,
+  Chip,
 } from "@mui/material";
 
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -31,6 +34,80 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import PersonIcon from "@mui/icons-material/Person";
 
+/* ------------------------------------------
+ *  주간 집계 헬퍼
+ * ------------------------------------------ */
+function calcWeeklySummary(historyDocs = []) {
+  const agg = {
+    wordsReview: new Set(),
+    wordsMaster: new Set(),
+    sentencesReview: new Set(),
+    sentencesMaster: new Set(),
+    grammarReview: new Set(),
+    grammarMaster: new Set(),
+    dialogsReview: new Set(),
+    dialogsMaster: new Set(),
+  };
+
+  const dateSet = new Set();
+
+  for (const h of historyDocs) {
+    if (h.dateKey) dateSet.add(h.dateKey);
+
+    (h.wordsDone || []).forEach((id) => agg.wordsReview.add(id));
+    (h.wordsKnown || []).forEach((id) => agg.wordsMaster.add(id));
+
+    (h.sentencesDone || []).forEach((id) =>
+      agg.sentencesReview.add(id)
+    );
+    (h.sentencesKnown || []).forEach((id) =>
+      agg.sentencesMaster.add(id)
+    );
+
+    (h.grammarDone || []).forEach((id) =>
+      agg.grammarReview.add(id)
+    );
+    (h.grammarKnown || []).forEach((id) =>
+      agg.grammarMaster.add(id)
+    );
+
+    (h.dialogsDone || []).forEach((id) =>
+      agg.dialogsReview.add(id)
+    );
+    (h.dialogsKnown || []).forEach((id) =>
+      agg.dialogsMaster.add(id)
+    );
+  }
+
+  const toArr = (s) => Array.from(s);
+
+  const today = new Date();
+  let streak = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = toDateKey(d);
+    if (dateSet.has(key)) streak += 1;
+    else break;
+  }
+
+  return {
+    wordsReview: toArr(agg.wordsReview),
+    wordsMaster: toArr(agg.wordsMaster),
+    sentencesReview: toArr(agg.sentencesReview),
+    sentencesMaster: toArr(agg.sentencesMaster),
+    grammarReview: toArr(agg.grammarReview),
+    grammarMaster: toArr(agg.grammarMaster),
+    dialogsReview: toArr(agg.dialogsReview),
+    dialogsMaster: toArr(agg.dialogsMaster),
+    studiedDays: dateSet.size,
+    streak,
+  };
+}
+
+/* ------------------------------------------
+ *  메인 컴포넌트
+ * ------------------------------------------ */
 export default function AppHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -39,6 +116,12 @@ export default function AppHome() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("daily"); // "daily" | "weekly"
 
+  const [weeklySummary, setWeeklySummary] = useState(null);
+
+  // ✅ 요일 라벨 & 오늘 요일 인덱스 (0=일 ~ 6=토)
+  const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
+  const todayIdx = new Date().getDay();
+
   useEffect(() => {
     if (!user) return;
 
@@ -46,6 +129,7 @@ export default function AppHome() {
       try {
         setLoading(true);
 
+        // 1) 학습 풀 로딩
         const [words, grammar, dialogs, sentences] = await Promise.all([
           listCollection("words"),
           listCollection("grammar"),
@@ -60,9 +144,23 @@ export default function AppHome() {
           sentences: sentences.map((s) => ({ ...s, id: s.sentenceId })),
         };
 
-        const recentDocs = await listUserHistoryRecent(user.uid, 7);
+        // 2) 지난 7일 히스토리
+        const today = new Date();
+        const endKey = toDateKey(today);
+
+        const start = new Date(today);
+        start.setDate(today.getDate() - 6); // 오늘 포함 7일 전
+        const startKey = toDateKey(start);
+
+        const historyDocs = await listUserHistoryRange(
+          user.uid,
+          startKey,
+          endKey
+        );
+
+        // 3) 루틴 생성용 최근 학습 ID 집합
         const recentIds = new Set(
-          recentDocs.flatMap((h) => [
+          historyDocs.flatMap((h) => [
             ...(h.wordsDone || []),
             ...(h.wordsKnown || []),
             ...(h.grammarDone || []),
@@ -79,9 +177,13 @@ export default function AppHome() {
         });
 
         setRoutine(todaySet);
+
+        // 4) 주간 요약 계산
+        setWeeklySummary(calcWeeklySummary(historyDocs));
       } catch (e) {
         console.error(e);
         setRoutine(null);
+        setWeeklySummary(null);
       } finally {
         setLoading(false);
       }
@@ -93,10 +195,6 @@ export default function AppHome() {
   const g = routine?.grammar?.length ?? 0;
   const d = routine?.dialogs?.length ?? 0;
   const total = w + s + g + d;
-
-    // ✅ 요일 라벨 & 오늘 요일 인덱스 (0=일 ~ 6=토)
-  const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
-  const todayIdx = new Date().getDay();
 
   const homeCards = useMemo(
     () => [
@@ -110,7 +208,7 @@ export default function AppHome() {
       {
         key: "history",
         title: "학습 기록",
-        desc: "주간/누적 기록",
+        desc: "일별/주간 기록 보기",
         icon: <BarChartIcon />,
         onClick: () => navigate("/app/history"),
       },
@@ -129,6 +227,32 @@ export default function AppHome() {
     await logout();
     navigate("/", { replace: true });
   };
+
+  // 주간 탭용 숫자들
+  const weeklyCounts = useMemo(() => {
+    if (!weeklySummary) {
+      return {
+        wordTotal: 0,
+        sentenceTotal: 0,
+        grammarTotal: 0,
+        dialogTotal: 0,
+        studiedDays: 0,
+        streak: 0,
+      };
+    }
+    const ws = weeklySummary;
+    return {
+      wordTotal: ws.wordsReview.length + ws.wordsMaster.length,
+      sentenceTotal:
+        ws.sentencesReview.length + ws.sentencesMaster.length,
+      grammarTotal:
+        ws.grammarReview.length + ws.grammarMaster.length,
+      dialogTotal:
+        ws.dialogsReview.length + ws.dialogsMaster.length,
+      studiedDays: ws.studiedDays,
+      streak: ws.streak,
+    };
+  }, [weeklySummary]);
 
   return (
     <Box sx={{ py: 1 }}>
@@ -249,10 +373,6 @@ export default function AppHome() {
                   </Alert>
                 )}
 
-                {/* ------------------------ */}
-                {/* 오늘 공부 4개 카드 FLEX 배치 */}
-                {/* ------------------------ */}
-
                 {!loading && routine && (
                   <>
                     <Box
@@ -309,31 +429,34 @@ export default function AppHome() {
                     </Stack>
 
                     <Stack
-  direction="row"
-  justifyContent="space-between"
-  sx={{ pt: 0.5 }}
->
-  {weekdayLabels.map((day, i) => {
-    const isToday = i === todayIdx;
-    return (
-      <Chip
-        key={day + i}
-        label={day}
-        sx={{
-          width: 40,
-          height: 40,
-          borderRadius: 2,
-          fontSize: 12,
-          bgcolor: "white",
-          color: isToday ? "primary.main" : "text.secondary",
-          border: "1px solid",
-          borderColor: isToday ? "primary.main" : "grey.200",
-        }}
-      />
-    );
-  })}
-</Stack>
-
+                      direction="row"
+                      justifyContent="space-between"
+                      sx={{ pt: 0.5 }}
+                    >
+                      {weekdayLabels.map((day, i) => {
+                        const isToday = i === todayIdx;
+                        return (
+                          <Chip
+                            key={day + i}
+                            label={day}
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 2,
+                              fontSize: 12,
+                              bgcolor: "white",
+                              color: isToday
+                                ? "primary.main"
+                                : "text.secondary",
+                              border: "1px solid",
+                              borderColor: isToday
+                                ? "primary.main"
+                                : "grey.200",
+                            }}
+                          />
+                        );
+                      })}
+                    </Stack>
                   </>
                 )}
               </Stack>
@@ -341,21 +464,108 @@ export default function AppHome() {
           </Card>
         )}
 
-        {/* WEEKLY */}
+        {/* WEEKLY: 지난 7일 요약 */}
         {tab === "weekly" && (
           <Card>
             <CardContent>
-              <Stack spacing={1.5}>
-                <Typography variant="h6" fontWeight={800}>
-                  이번 주 학습 요약
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  주간 단어·문장·문법·회화 완료 개수, 연속 학습일(streak) 등을
-                  보여줄 예정이야.
-                </Typography>
-                <Alert severity="info" variant="outlined">
-                  주간 대시보드는 추후 추가 예정입니다.
-                </Alert>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6" fontWeight={800}>
+                    지난 7일 학습 요약
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    최근 7일 동안 공부한 단어·문장·문법·회화 개수를 한눈에
+                    볼 수 있어.
+                  </Typography>
+                </Box>
+
+                {loading && (
+                  <Stack spacing={1.5}>
+                    <Skeleton variant="rounded" height={78} />
+                    <Skeleton variant="rounded" height={18} />
+                    <Skeleton variant="rounded" height={40} />
+                  </Stack>
+                )}
+
+                {!loading && !weeklySummary && (
+                  <Alert severity="info">
+                    아직 지난 7일 동안 학습 기록이 없어. 오늘부터 시작해보자.
+                  </Alert>
+                )}
+
+                {!loading && weeklySummary && (
+                  <>
+                    <Stack direction="row" spacing={1}>
+                      <Chip
+                        label={`공부한 날 ${weeklyCounts.studiedDays}일`}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                      <Chip
+                        label={`연속 ${weeklyCounts.streak}일`}
+                        size="small"
+                        color="secondary"
+                        variant="outlined"
+                      />
+                    </Stack>
+
+                    <Box
+                      sx={{
+                        mt: 0.5,
+                        borderRadius: 3,
+                        border: "1px solid #EEF0F5",
+                        bgcolor: "#FFFFFF",
+                        p: 1,
+                        display: "flex",
+                        gap: 1,
+                      }}
+                    >
+                      <MiniCountCard
+                        label="단어"
+                        value={weeklyCounts.wordTotal}
+                        color="primary.main"
+                        bg="#F3F6FF"
+                      />
+                      <MiniCountCard
+                        label="문장"
+                        value={weeklyCounts.sentenceTotal}
+                        color="#2563EB"
+                        bg="#EFF6FF"
+                      />
+                      <MiniCountCard
+                        label="문법"
+                        value={weeklyCounts.grammarTotal}
+                        color="#D97706"
+                        bg="#FFF7E8"
+                      />
+                      <MiniCountCard
+                        label="회화"
+                        value={weeklyCounts.dialogTotal}
+                        color="#059669"
+                        bg="#F0FBF5"
+                      />
+                    </Box>
+
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ mt: 0.5 }}
+                    >
+                      * 다시보기 + 알고있는 항목 합산 기준
+                    </Typography>
+
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => navigate("/app/history")}
+                      sx={{ alignSelf: "flex-start", mt: 1 }}
+                      startIcon={<BarChartIcon fontSize="small" />}
+                    >
+                      자세히 보기 (일별/항목별)
+                    </Button>
+                  </>
+                )}
               </Stack>
             </CardContent>
           </Card>
@@ -395,7 +605,7 @@ export default function AppHome() {
 }
 
 /* ---------------------------------------------------- */
-/*        MiniCountCard (4개 항목용) - 최종 수정         */
+/*        MiniCountCard (4개 항목용)                    */
 /* ---------------------------------------------------- */
 function MiniCountCard({ label, value, color, bg }) {
   return (
