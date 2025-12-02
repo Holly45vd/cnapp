@@ -115,3 +115,17 @@ export async function listUserHistoryRange(uid, startKey, endKey) {
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
+
+
+// ✅ 특정 날짜의 studyHistory 일부 필드를 merge 업데이트
+export async function updateUserHistoryDoc(uid, dateKey, partial) {
+  if (!uid || !dateKey) {
+    throw new Error("updateUserHistoryDoc: uid와 dateKey가 필요합니다.");
+  }
+
+  const userRef = doc(db, "users", uid);
+  const histRef = doc(collection(userRef, "studyHistory"), dateKey);
+
+  // 해당 날짜 문서를 부분 업데이트(merge)
+  await setDoc(histRef, partial, { merge: true });
+}

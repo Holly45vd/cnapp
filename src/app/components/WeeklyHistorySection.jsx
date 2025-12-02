@@ -1,17 +1,39 @@
 // src/app/components/WeeklyHistorySection.jsx
 
 import { useEffect, useMemo, useState } from "react";
-import { Box, Card, CardContent, Typography, Tabs, Tab, Stack } from "@mui/material";
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Tabs,
+  Tab,
+  Stack,
+  IconButton,
+  Tooltip,
+} from "@mui/material";
 
 import { useAuth } from "../../providers/AuthProvider";
-import { listUserHistoryRange, listCollection } from "../../firebase/db";
+import {
+  listUserHistoryRange,
+  listCollection,
+  updateUserHistoryDoc,
+} from "../../firebase/db";
 import { speakZh } from "../../lib/ttsHelper";
-import { freeTextPinyinToKorean, pinyinArrayToKorean } from "../../lib/pinyinKorean";
+import {
+  freeTextPinyinToKorean,
+  pinyinArrayToKorean,
+} from "../../lib/pinyinKorean";
 import Loading from "../../shared/components/Loading";
 import ErrorBox from "../../shared/components/ErrorBox";
 import { toDateKey } from "../../shared/utils/date";
 
-// ✅ 오늘 포함 지난 7일 dateKey 리스트
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import ReplayIcon from "@mui/icons-material/Replay";
+
+/* ---------------------------------------
+ *  오늘 포함 지난 7일 dateKey 리스트
+ * --------------------------------------*/
 function getLast7DateKeys() {
   const keys = [];
   const today = new Date();
@@ -42,6 +64,9 @@ export default function WeeklyHistorySection() {
   const startKey = last7Keys[last7Keys.length - 1]; // 7일 전
   const endKey = last7Keys[0]; // 오늘
 
+  /* ---------------------------------------
+   *  지난 7일 히스토리 + vocab 로딩
+   * --------------------------------------*/
   useEffect(() => {
     if (!user) return;
 
@@ -62,8 +87,6 @@ export default function WeeklyHistorySection() {
           listCollection("dialogs"),
         ]);
 
-        // ⚠ listCollection 이 d.data()만 반환하므로,
-        // 여기서 id를 wordId / sentenceId / grammarId / dialogId 로 세팅해서 map 생성
         const wMap = {};
         (words || []).forEach((w) => {
           const id = w.wordId || w.id;
@@ -103,7 +126,9 @@ export default function WeeklyHistorySection() {
     load();
   }, [user, startKey, endKey]);
 
-  // ✅ 지난 7일 집계 (Done = 다시보기, Known = 마스터)
+  /* ---------------------------------------
+   *  지난 7일 집계 (Set → 배열)
+   * --------------------------------------*/
   const weeklySummary = useMemo(() => {
     const agg = {
       wordsReview: new Set(),
@@ -156,6 +181,76 @@ export default function WeeklyHistorySection() {
     };
   }, [historyDocs]);
 
+  /* ---------------------------------------
+   *  상태 토글 → historyDocs + Firestore 동기화
+   *  kind: "words" | "sentences" | "grammar" | "dialogs"
+   *  from: "review" | "master"
+   * --------------------------------------*/
+  const handleToggleStatus = async (kind, id, from) => {
+    if (!user || !id) return;
+
+    const config = {
+      words: { reviewField: "wordsDone", masterField: "wordsKnown" },
+      sentences: {
+        reviewField: "sentencesDone",
+        masterField: "sentencesKnown",
+      },
+      grammar: {
+        reviewField: "grammarDone",
+        masterField: "grammarKnown",
+      },
+      dialogs: {
+        reviewField: "dialogsDone",
+        masterField: "dialogsKnown",
+      },
+    }[kind];
+
+    if (!config) return;
+
+    const fromField =
+      from === "review" ? config.reviewField : config.masterField;
+    const toField =
+      from === "review" ? config.masterField : config.reviewField;
+
+    const updates = [];
+
+    const newDocs = historyDocs.map((doc) => {
+      const fromArr = doc[fromField] || [];
+      const toArr = doc[toField] || [];
+
+      if (!fromArr.includes(id)) return doc;
+
+      const newFrom = fromArr.filter((x) => x !== id);
+      const newTo = toArr.includes(id) ? toArr : [...toArr, id];
+
+      updates.push({
+        dateKey: doc.dateKey,
+        patch: { [fromField]: newFrom, [toField]: newTo },
+      });
+
+      return {
+        ...doc,
+        [fromField]: newFrom,
+        [toField]: newTo,
+      };
+    });
+
+    // 로컬 상태 먼저 반영
+    setHistoryDocs(newDocs);
+
+    // Firestore 동기화
+    try {
+      await Promise.all(
+        updates.map(({ dateKey, patch }) =>
+          updateUserHistoryDoc(user.uid, dateKey, patch)
+        )
+      );
+    } catch (e) {
+      console.error("toggleStatus Firestore 에러", e);
+      // 필요하면 여기서 토스트/에러 표시 추가 가능
+    }
+  };
+
   if (!user) return null;
   if (loading) return <Loading />;
   if (err) return <ErrorBox error={err} />;
@@ -183,35 +278,73 @@ export default function WeeklyHistorySection() {
       </Tabs>
 
       {tab === "words" && (
-        <WordsWeeklyTab summary={weeklySummary} wordsMap={wordsMap} />
+        <WordsWeeklyTab
+          summary={weeklySummary}
+          wordsMap={wordsMap}
+          onToggle={handleToggleStatus}
+        />
       )}
       {tab === "sentences" && (
         <SentencesWeeklyTab
           summary={weeklySummary}
           sentencesMap={sentencesMap}
+          onToggle={handleToggleStatus}
         />
       )}
       {tab === "grammar" && (
         <GrammarWeeklyTab
           summary={weeklySummary}
           grammarMap={grammarMap}
+          onToggle={handleToggleStatus}
         />
       )}
       {tab === "dialogs" && (
         <DialogsWeeklyTab
           summary={weeklySummary}
           dialogsMap={dialogsMap}
+          onToggle={handleToggleStatus}
         />
       )}
     </Box>
   );
 }
 
-/* ------------------------------
- *  탭별 하위 컴포넌트
- * ------------------------------ */
+/* ---------------------------------------
+ *  공통: 카드 우측 상단 토글 아이콘
+ * --------------------------------------*/
+function StatusToggleIcon({ kind, id, type, onToggle }) {
+  // type: "review" or "master"
+  const isReview = type === "review";
+  const label = isReview ? "알고있는 쪽으로 이동" : "다시보기로 이동";
 
-function WordsWeeklyTab({ summary, wordsMap }) {
+  const handleClick = (e) => {
+    e.stopPropagation(); // 카드 클릭(speak)과 분리
+    onToggle(kind, id, type);
+  };
+
+  return (
+    <Tooltip title={label}>
+      <IconButton
+        size="small"
+        onClick={handleClick}
+        sx={{
+          ml: 1,
+        }}
+      >
+        {isReview ? (
+          <CheckCircleOutlineIcon fontSize="small" />
+        ) : (
+          <ReplayIcon fontSize="small" />
+        )}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+/* ------------------------------
+ *  단어 탭
+ * ------------------------------*/
+function WordsWeeklyTab({ summary, wordsMap, onToggle }) {
   const makeKoPron = (w) => {
     if (!w) return "";
     if (w.koPronunciation) return w.koPronunciation;
@@ -222,33 +355,58 @@ function WordsWeeklyTab({ summary, wordsMap }) {
     return "";
   };
 
-  const renderList = (ids, title) => (
+  const renderList = (ids, title, type) => (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>
         {title} ({ids.length}개)
       </Typography>
-      <Stack spacing={1}>
+      <Stack spacing={1.2}>
         {ids.map((id) => {
           const w = wordsMap[id];
           if (!w) return null;
+
           const koPron = makeKoPron(w);
+          const meaning = w.ko || w.meaning_ko || w.meaningKr || w.kr || "";
 
           return (
             <Card
               key={id}
               variant="outlined"
-              sx={{ cursor: "pointer" }}
+              sx={{
+                cursor: "pointer",
+              }}
               onClick={() => speakZh(w.audio?.ttsText || w.zh)}
             >
-              <CardContent>
-                <Typography variant="h6">{w.zh}</Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  {w.pinyin}
-                  {koPron && ` / ${koPron}`}
-                </Typography>
-                <Typography variant="body2">
-                  {w.ko || w.meaning_ko}
-                </Typography>
+              <CardContent sx={{ pb: 1.5 }}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="flex-start"
+                  sx={{ mb: 0.5 }}
+                >
+                  <Typography variant="h6">{w.zh}</Typography>
+                  <StatusToggleIcon
+                    kind="words"
+                    id={id}
+                    type={type}
+                    onToggle={onToggle}
+                  />
+                </Stack>
+
+                {/* 병음 + 한국어 발음 */}
+                {(w.pinyin || koPron) && (
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    {w.pinyin}
+                    {koPron && ` / ${koPron}`}
+                  </Typography>
+                )}
+
+                {/* 한국어 뜻 */}
+                {meaning && (
+                  <Typography variant="body2" color="text.secondary">
+                    {meaning}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           );
@@ -259,19 +417,22 @@ function WordsWeeklyTab({ summary, wordsMap }) {
 
   return (
     <Box>
-      {renderList(summary.wordsReview, "다시보기 단어")}
-      {renderList(summary.wordsMaster, "알고있는 단어")}
+      {renderList(summary.wordsReview, "다시보기 단어", "review")}
+      {renderList(summary.wordsMaster, "알고있는 단어", "master")}
     </Box>
   );
 }
 
-function SentencesWeeklyTab({ summary, sentencesMap }) {
-  const renderList = (ids, title) => (
+/* ------------------------------
+ *  문장 탭
+ * ------------------------------*/
+function SentencesWeeklyTab({ summary, sentencesMap, onToggle }) {
+  const renderList = (ids, title, type) => (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>
         {title} ({ids.length}개)
       </Typography>
-      <Stack spacing={1}>
+      <Stack spacing={1.2}>
         {ids.map((id) => {
           const s = sentencesMap[id];
           if (!s) return null;
@@ -287,13 +448,37 @@ function SentencesWeeklyTab({ summary, sentencesMap }) {
               sx={{ cursor: "pointer" }}
               onClick={() => speakZh(s.audio?.ttsText || s.zh)}
             >
-              <CardContent>
-                <Typography variant="body1">{s.zh}</Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  {s.pinyin}
-                  {koPron && ` / ${koPron}`}
-                </Typography>
-                <Typography variant="body2">{s.ko}</Typography>
+              <CardContent sx={{ pb: 1.5 }}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="flex-start"
+                  sx={{ mb: 0.5 }}
+                >
+                  {/* 중국어 문장 */}
+                  <Typography variant="body1">{s.zh}</Typography>
+                  <StatusToggleIcon
+                    kind="sentences"
+                    id={id}
+                    type={type}
+                    onToggle={onToggle}
+                  />
+                </Stack>
+
+                {/* 병음 + 한국어 발음 */}
+                {(s.pinyin || koPron) && (
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    {s.pinyin}
+                    {koPron && ` / ${koPron}`}
+                  </Typography>
+                )}
+
+                {/* 한국어 뜻 */}
+                {s.ko && (
+                  <Typography variant="body2" color="text.secondary">
+                    {s.ko}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           );
@@ -304,31 +489,53 @@ function SentencesWeeklyTab({ summary, sentencesMap }) {
 
   return (
     <Box>
-      {renderList(summary.sentencesReview, "다시보기 문장")}
-      {renderList(summary.sentencesMaster, "알고있는 문장")}
+      {renderList(summary.sentencesReview, "다시보기 문장", "review")}
+      {renderList(summary.sentencesMaster, "알고있는 문장", "master")}
     </Box>
   );
 }
 
-function GrammarWeeklyTab({ summary, grammarMap }) {
-  const renderList = (ids, title) => (
+/* ------------------------------
+ *  문법 탭
+ * ------------------------------*/
+function GrammarWeeklyTab({ summary, grammarMap, onToggle }) {
+  const renderList = (ids, title, type) => (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>
         {title} ({ids.length}개)
       </Typography>
-      <Stack spacing={1}>
+      <Stack spacing={1.2}>
         {ids.map((id) => {
           const g = grammarMap[id];
           if (!g) return null;
 
           return (
             <Card key={id} variant="outlined">
-              <CardContent>
-                <Typography variant="h6">{g.title}</Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  {g.corePattern}
-                </Typography>
-                <Typography variant="body2">
+              <CardContent sx={{ pb: 1.5 }}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="flex-start"
+                  sx={{ mb: 0.5 }}
+                >
+                  <Typography variant="h6">
+                    {g.title || g.shortTitle}
+                  </Typography>
+                  <StatusToggleIcon
+                    kind="grammar"
+                    id={id}
+                    type={type}
+                    onToggle={onToggle}
+                  />
+                </Stack>
+
+                {g.corePattern && (
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    {g.corePattern}
+                  </Typography>
+                )}
+
+                <Typography variant="body2" color="text.secondary">
                   {g.meaning_ko || g.summary_ko}
                 </Typography>
               </CardContent>
@@ -341,42 +548,110 @@ function GrammarWeeklyTab({ summary, grammarMap }) {
 
   return (
     <Box>
-      {renderList(summary.grammarReview, "다시보기 문법")}
-      {renderList(summary.grammarMaster, "알고있는 문법")}
+      {renderList(summary.grammarReview, "다시보기 문법", "review")}
+      {renderList(summary.grammarMaster, "알고있는 문법", "master")}
     </Box>
   );
 }
 
-function DialogsWeeklyTab({ summary, dialogsMap }) {
-  const renderList = (ids, title) => (
+/* ------------------------------
+ *  회화 탭
+ *  - topic 타이틀 제거
+ *  - 각 줄에: 한자 / 병음 / 한글 발음 / 뜻
+ *  - 토글 아이콘으로 상태 변경
+ * ------------------------------*/
+function DialogsWeeklyTab({ summary, dialogsMap, onToggle }) {
+  const makeKoPron = (pinyin) => {
+    if (!pinyin) return "";
+    return freeTextPinyinToKorean(pinyin);
+  };
+
+  const renderList = (ids, title, type) => (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>
         {title} ({ids.length}개)
       </Typography>
-      <Stack spacing={1}>
+
+      <Stack spacing={1.5}>
         {ids.map((id) => {
           const d = dialogsMap[id];
           if (!d) return null;
 
-          const firstLines = (d.lines || [])
-            .slice(0, 3)
-            .map((ln) => ln.zh);
-          const preview = firstLines.join(" / ");
-
-          const allZh = (d.lines || [])
-            .map((ln) => ln.zh)
-            .join(" ");
+          const lines = d.lines || [];
+          const previewLines = lines.slice(0, 3);
 
           return (
-            <Card
-              key={id}
-              variant="outlined"
-              sx={{ cursor: "pointer" }}
-              onClick={() => speakZh(allZh)}
-            >
-              <CardContent>
-                <Typography variant="h6">{d.topic}</Typography>
-                <Typography variant="body2">{preview}</Typography>
+            <Card key={id} variant="outlined" sx={{ p: 1.3 }}>
+              <CardContent sx={{ p: 0 }}>
+                {/* 상단: 좌측엔 "회화" 표시 정도, 우측엔 토글 */}
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  sx={{ mb: 1 }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 700 }}
+                  >
+                    회화
+                  </Typography>
+
+                  <StatusToggleIcon
+                    kind="dialogs"
+                    id={id}
+                    type={type}
+                    onToggle={onToggle}
+                  />
+                </Stack>
+
+                {/* 각 줄: 한자 / 병음 / 한국어 발음 / 뜻 */}
+                {previewLines.map((l, idx) => {
+                  const koPron = makeKoPron(l.pinyin);
+
+                  return (
+                    <Box
+                      key={idx}
+                      sx={{
+                        mb: 1,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => speakZh(l.zh)}
+                    >
+                      {/* 한자 */}
+                      <Typography fontWeight={700}>{l.zh}</Typography>
+
+                      {/* 병음 + 한국어 발음 */}
+                      {(l.pinyin || koPron) && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {l.pinyin}
+                          {koPron && ` / ${koPron}`}
+                        </Typography>
+                      )}
+
+                      {/* 한국어 뜻 */}
+                      {l.ko && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {l.ko}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })}
+
+                {/* 나머지 줄 안내 */}
+                {lines.length > 3 && (
+                  <Typography variant="caption" color="text.secondary">
+                    · 외 {lines.length - 3}줄…
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           );
@@ -387,8 +662,8 @@ function DialogsWeeklyTab({ summary, dialogsMap }) {
 
   return (
     <Box>
-      {renderList(summary.dialogsReview, "다시보기 회화")}
-      {renderList(summary.dialogsMaster, "알고있는 회화")}
+      {renderList(summary.dialogsReview, "다시보기 회화", "review")}
+      {renderList(summary.dialogsMaster, "알고있는 회화", "master")}
     </Box>
   );
 }

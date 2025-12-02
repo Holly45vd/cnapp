@@ -1,9 +1,11 @@
 // src/app/pages/DoneToday.jsx
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { saveUserHistory } from "../../firebase/db";
 import { useAuth } from "../../providers/AuthProvider";
 import { toDateKey } from "../../shared/utils/date";
 
+// MUI
 import {
   Box,
   Card,
@@ -15,7 +17,6 @@ import {
   Grid,
   IconButton,
 } from "@mui/material";
-
 import CloseIcon from "@mui/icons-material/Close";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ReplayIcon from "@mui/icons-material/Replay";
@@ -34,11 +35,24 @@ export default function DoneToday() {
     durationSec = 0,
   } = state || {};
 
+  // 디버그: 처음 들어올 때 전체 상태 찍기
+  useEffect(() => {
+    console.log("[DoneToday] mount", {
+      user,
+      hasRoutine: !!routine,
+      wordResult,
+      grammarResult,
+      dialogResult,
+      sentenceResult,
+      durationSec,
+    });
+  }, [user, routine, wordResult, grammarResult, dialogResult, sentenceResult, durationSec]);
+
   if (!routine) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="body2" color="text.secondary">
-          데이터 없음
+          데이터 없음 (routine 누락)
         </Typography>
       </Box>
     );
@@ -60,15 +74,15 @@ export default function DoneToday() {
 
   const totalLearn =
     wordsDone.length +
+    sentencesDone.length +
     grammarDone.length +
-    dialogsDone.length +
-    sentencesDone.length;
+    dialogsDone.length;
 
   const totalKnown =
     wordsKnown.length +
+    sentencesKnown.length +
     grammarKnown.length +
-    dialogsKnown.length +
-    sentencesKnown.length;
+    dialogsKnown.length;
 
   const totalGoal =
     (routine.words?.length || 0) +
@@ -83,22 +97,99 @@ export default function DoneToday() {
     ? Math.round((totalKnown / totalGoal) * 100)
     : 0;
 
-  const handleSaveAndGoHome = async () => {
-    if (!user) return;
+  // 🔒 중복 저장 방지용
+  const savingRef = useRef(false);
 
-    await saveUserHistory(user.uid, dateKey, {
+  // ✅ 1) 페이지 진입 시 자동 저장 (한 번만)
+  useEffect(() => {
+    const autoSave = async () => {
+      if (!user) {
+        console.warn("[DoneToday] autoSave: user 없음, 저장 스킵");
+        return;
+      }
+      if (savingRef.current) {
+        console.log("[DoneToday] autoSave: 이미 저장 시도됨, 스킵");
+        return;
+      }
+      savingRef.current = true;
+
+      const payload = {
+        wordsDone,
+        wordsKnown,
+        sentencesDone,
+        sentencesKnown,
+        grammarDone,
+        grammarKnown,
+        dialogsDone,
+        dialogsKnown,
+        durationSec,
+      };
+
+      try {
+        console.log("[DoneToday] autoSave 시작", {
+          uid: user.uid,
+          dateKey,
+          payload,
+        });
+
+        await saveUserHistory(user.uid, dateKey, payload);
+
+        console.log("[DoneToday] autoSave 성공");
+      } catch (err) {
+        console.error("[DoneToday] autoSave 에러", err);
+      }
+    };
+
+    autoSave();
+  }, [
+    user,
+    dateKey,
+    wordsDone,
+    wordsKnown,
+    sentencesDone,
+    sentencesKnown,
+    grammarDone,
+    grammarKnown,
+    dialogsDone,
+    dialogsKnown,
+    durationSec,
+  ]);
+
+  // ✅ 2) 버튼으로 강제 저장 + 홈 이동
+  const handleSaveAndGoHome = async () => {
+    if (!user) {
+      console.warn("[DoneToday] handleSaveAndGoHome: user 없음");
+      nav("/app", { replace: true });
+      return;
+    }
+
+    const payload = {
       wordsDone,
       wordsKnown,
+      sentencesDone,
+      sentencesKnown,
       grammarDone,
       grammarKnown,
       dialogsDone,
       dialogsKnown,
-      sentencesDone,
-      sentencesKnown,
       durationSec,
-    });
+    };
 
-    nav("/app", { replace: true });
+    try {
+      console.log("[DoneToday] 버튼 저장 시작", {
+        uid: user.uid,
+        dateKey,
+        payload,
+      });
+
+      await saveUserHistory(user.uid, dateKey, payload);
+
+      console.log("[DoneToday] 버튼 저장 성공");
+    } catch (err) {
+      console.error("[DoneToday] 버튼 저장 에러", err);
+    } finally {
+      nav("/app", { replace: true });
+    }
   };
 
   return (
@@ -171,7 +262,7 @@ export default function DoneToday() {
           </Grid>
         </Grid>
 
-        {/* 진행바 카드 */}
+        {/* 진행바 */}
         <Card>
           <CardContent>
             <Stack spacing={1.2}>

@@ -471,11 +471,7 @@ export default function AppHome() {
               <Stack spacing={2}>
                 <Box>
                   <Typography variant="h6" fontWeight={800}>
-                    지난 7일 학습 요약
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    최근 7일 동안 공부한 단어·문장·문법·회화 개수를 한눈에
-                    볼 수 있어.
+                    지난 7일 학습
                   </Typography>
                 </Box>
 
