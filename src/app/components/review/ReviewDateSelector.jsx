@@ -1,347 +1,190 @@
-// src/app/components/review/ReviewSections.jsx
-
-import React, { useMemo, useState } from "react";
+// src/app/components/review/ReviewDateSelector.jsx
+import React, { useState } from "react";
 import {
   Box,
   Card,
   CardContent,
   Stack,
   Typography,
-  Tabs,
-  Tab,
   Chip,
-  Divider,
+  TextField,
   Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from "@mui/material";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import HistoryIcon from "@mui/icons-material/History";
 
-const TYPE_CONFIG = {
-  word: { label: "단어", color: "primary", key: "word" },
-  sentence: { label: "문장", color: "secondary", key: "sentence" },
-  grammar: { label: "문법", color: "success", key: "grammar" },
-  dialog: { label: "회화", color: "warning", key: "dialog" },
-};
-
-function ReviewSummaryCard({ label, reviewCount, masterCount, color }) {
-  return (
-    <Card variant="outlined" sx={{ flex: 1, minWidth: 0 }}>
-      <CardContent sx={{ py: 1.5 }}>
-        <Stack spacing={0.5}>
-          <Typography variant="subtitle2" color="text.secondary">
-            {label}
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip
-              label={`다시보기 ${reviewCount}개`}
-              size="small"
-              color={color}
-              variant="outlined"
-            />
-            <Chip
-              label={`외웠음 ${masterCount}개`}
-              size="small"
-              color={color}
-            />
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
+function formatDateLabel(dateKey) {
+  if (!dateKey) return "";
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+  const mm = String(m).padStart(2, "0");
+  const dd = String(d).padStart(2, "0");
+  return `${mm}/${dd} (${weekday})`;
 }
 
-function ReviewItemList({
-  title,
-  items,
-  type,
-  mode, // "review" | "master"
-  onSpeak,
-  onToggleStatus,
-}) {
-  const isReview = mode === "review";
-
-  if (!items || items.length === 0) {
-    return (
-      <Box sx={{ p: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          {isReview ? "다시 볼 항목이 없습니다." : "외웠음으로 표시된 항목이 없습니다."}
-        </Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Stack spacing={1}>
-      {items.map((item) => {
-        const zh = item.zh || "";
-        const pinyin = item.pinyin || "";
-        const ko =
-          item.ko ||
-          item.meaning_ko ||
-          item.meaningKr ||
-          item.kr ||
-          "";
-
-        return (
-          <Card
-            key={zh + pinyin + ko}
-            variant="outlined"
-            sx={{ borderRadius: 2 }}
-          >
-            <CardContent sx={{ py: 1.2, "&:last-child": { pb: 1.2 } }}>
-              <Stack spacing={0.75}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {zh}
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      size="small"
-                      variant="text"
-                      onClick={() => onSpeak?.(item)}
-                    >
-                      듣기
-                    </Button>
-                    {isReview ? (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() =>
-                          onToggleStatus?.(type, item, true /* toMaster */)
-                        }
-                      >
-                        외웠음으로 표시
-                      </Button>
-                    ) : (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() =>
-                          onToggleStatus?.(type, item, false /* toReview */)
-                        }
-                      >
-                        다시보기로 이동
-                      </Button>
-                    )}
-                  </Stack>
-                </Stack>
-
-                {pinyin && (
-                  <Typography variant="body2" color="text.secondary">
-                    {pinyin}
-                  </Typography>
-                )}
-                {ko && (
-                  <Typography variant="body2" sx={{ mt: 0.25 }}>
-                    {ko}
-                  </Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </Stack>
-  );
-}
-
-export default function ReviewSections({
+/**
+ * props:
+ *  - selectedDateKey: 현재 선택된 날짜("YYYY-MM-DD")
+ *  - onChangeDateKey: (dateKey: string) => void
+ *  - availableDates: string[]  // 실제 학습 기록이 있는 날짜 목록
+ */
+export default function ReviewDateSelector({
   selectedDateKey,
-  hasHistory,
-  reviewItems,
-  onSpeakWord,
-  onSpeakSentence,
-  onSpeakDialog,
-  onToggleStatus,
+  onChangeDateKey,
+  availableDates = [],
 }) {
-  const [tab, setTab] = useState("word");
+  const hasAnyHistory = availableDates.length > 0;
+  const selectedHasHistory =
+    !!selectedDateKey && availableDates.includes(selectedDateKey);
 
-  const counts = useMemo(() => {
-    if (!reviewItems) {
-      return {
-        word: { review: 0, master: 0 },
-        sentence: { review: 0, master: 0 },
-        grammar: { review: 0, master: 0 },
-        dialog: { review: 0, master: 0 },
-      };
-    }
-    return {
-      word: {
-        review: reviewItems.wordReview?.length || 0,
-        master: reviewItems.wordMaster?.length || 0,
-      },
-      sentence: {
-        review: reviewItems.sentenceReview?.length || 0,
-        master: reviewItems.sentenceMaster?.length || 0,
-      },
-      grammar: {
-        review: reviewItems.grammarReview?.length || 0,
-        master: reviewItems.grammarMaster?.length || 0,
-      },
-      dialog: {
-        review: reviewItems.dialogReview?.length || 0,
-        master: reviewItems.dialogMaster?.length || 0,
-      },
-    };
-  }, [reviewItems]);
+  // 최신순 정렬
+  const sortedDates = [...availableDates].sort((a, b) =>
+    b.localeCompare(a)
+  );
+  const recentDates = sortedDates.slice(0, 7);
 
-  if (!hasHistory) {
-    return (
-      <Card>
-        <CardContent>
-          <Typography variant="body2" color="text.secondary">
-            {selectedDateKey
-              ? `${selectedDateKey}에는 학습 기록이 없습니다.`
-              : "복습할 날짜를 먼저 선택해주세요."}
-          </Typography>
-        </CardContent>
-      </Card>
-    );
-  }
+  // 누적 공부일
+  const totalStudyDays = availableDates.length;
 
-  // 현재 탭에 따른 데이터와 핸들러
-  let currentReview = [];
-  let currentMaster = [];
-  let speakHandler = () => {};
+  // 팝업 상태
+  const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
 
-  if (tab === "word") {
-    currentReview = reviewItems.wordReview || [];
-    currentMaster = reviewItems.wordMaster || [];
-    speakHandler = onSpeakWord;
-  } else if (tab === "sentence") {
-    currentReview = reviewItems.sentenceReview || [];
-    currentMaster = reviewItems.sentenceMaster || [];
-    speakHandler = onSpeakSentence;
-  } else if (tab === "grammar") {
-    currentReview = reviewItems.grammarReview || [];
-    currentMaster = reviewItems.grammarMaster || [];
-    // 문법은 보통 TTS 안 쓰겠지만, 그냥 단어 읽게 둘 수도 있음
-    speakHandler = () => {};
-  } else if (tab === "dialog") {
-    currentReview = reviewItems.dialogReview || [];
-    currentMaster = reviewItems.dialogMaster || [];
-    speakHandler = onSpeakDialog;
-  }
+  const handleDateInputChange = (e) => {
+    const value = e.target.value; // "YYYY-MM-DD"
+    if (!value) return;
+    onChangeDateKey && onChangeDateKey(value);
+  };
 
-  const typeConfig = TYPE_CONFIG[tab];
+  const handleSelectFromDialog = (dateKey) => {
+    onChangeDateKey && onChangeDateKey(dateKey);
+    setOpenHistoryDialog(false);
+  };
 
   return (
-    <Stack spacing={2}>
-      {/* 상단 요약 (4종) */}
+    <>
       <Card>
         <CardContent>
           <Stack spacing={1.5}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              {selectedDateKey} 학습 정리
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              이 날 학습한 내용 중, 다시 볼 항목과 이미 외운 항목을 한눈에 볼 수
-              있어요.
-            </Typography>
-
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap">
-              <ReviewSummaryCard
-                label="단어"
-                reviewCount={counts.word.review}
-                masterCount={counts.word.master}
-                color="primary"
-              />
-              <ReviewSummaryCard
-                label="문장"
-                reviewCount={counts.sentence.review}
-                masterCount={counts.sentence.master}
-                color="secondary"
-              />
-              <ReviewSummaryCard
-                label="문법"
-                reviewCount={counts.grammar.review}
-                masterCount={counts.grammar.master}
-                color="success"
-              />
-              <ReviewSummaryCard
-                label="회화"
-                reviewCount={counts.dialog.review}
-                masterCount={counts.dialog.master}
-                color="warning"
-              />
-            </Stack>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      {/* 상세 탭 */}
-      <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Tabs
-              value={tab}
-              onChange={(_, v) => setTab(v)}
-              variant="fullWidth"
-            >
-              <Tab label="단어" value="word" />
-              <Tab label="문장" value="sentence" />
-              <Tab label="문법" value="grammar" />
-              <Tab label="회화" value="dialog" />
-            </Tabs>
-
-            <Divider />
-
+            {/* 헤더 + 누적 공부일 버튼 */}
             <Stack
-              direction={{ xs: "column", md: "row" }}
-              spacing={2}
-              alignItems="flex-start"
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              spacing={1}
             >
-              {/* 다시보기 리스트 */}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                  <Typography variant="subtitle2" fontWeight={700}>
-                    {typeConfig.label} 다시보기
-                  </Typography>
-                  <Chip
-                    label={`${counts[typeConfig.key].review}개`}
-                    size="small"
-                    color={typeConfig.color}
-                    variant="outlined"
-                  />
-                </Stack>
-                <ReviewItemList
-                  title="다시보기"
-                  items={currentReview}
-                  type={tab}
-                  mode="review"
-                  onSpeak={speakHandler}
-                  onToggleStatus={onToggleStatus}
-                />
-              </Box>
+              <Typography variant="subtitle1" fontWeight={700}>
+                복습 날짜 선택
+              </Typography>
 
-              {/* 외웠음 리스트 */}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                  <Typography variant="subtitle2" fontWeight={700}>
-                    {typeConfig.label} 외웠음
-                  </Typography>
-                  <Chip
-                    label={`${counts[typeConfig.key].master}개`}
-                    size="small"
-                    color={typeConfig.color}
-                  />
-                </Stack>
-                <ReviewItemList
-                  title="외웠음"
-                  items={currentMaster}
-                  type={tab}
-                  mode="master"
-                  onSpeak={speakHandler}
-                  onToggleStatus={onToggleStatus}
-                />
-              </Box>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<HistoryIcon fontSize="small" />}
+                disabled={!hasAnyHistory}
+                onClick={() => setOpenHistoryDialog(true)}
+              >
+                누적 {totalStudyDays}일 공부
+              </Button>
             </Stack>
+
+            {/* 안내 문구 */}
+            {!hasAnyHistory && (
+              <Typography variant="body2" color="text.secondary">
+                아직 기록된 학습 날짜가 없습니다. 오늘 공부를 마치면 이곳에서
+                복습 날짜를 선택할 수 있어요.
+              </Typography>
+            )}
+
+            {hasAnyHistory && !selectedDateKey && (
+              <Typography variant="body2" color="text.secondary">
+                복습할 날짜를 선택해주세요.
+              </Typography>
+            )}
+
+            {hasAnyHistory && selectedDateKey && !selectedHasHistory && (
+              <Typography variant="body2" color="text.secondary">
+                {selectedDateKey}에는 학습 기록이 없습니다. 아래에서 다른 날짜를
+                선택해주세요.
+              </Typography>
+            )}
+
+            {/* 달력 선택 (HTML5 date input) */}
+            {hasAnyHistory && (
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <CalendarMonthIcon fontSize="small" color="action" />
+                <TextField
+                  type="date"
+                  size="small"
+                  value={selectedDateKey || ""}
+                  onChange={handleDateInputChange}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                />
+              </Stack>
+            )}
+
+            
+
+            {/* (옵션) 전체 날짜가 7일보다 많으면 안내 문구만 추가 */}
+            {hasAnyHistory && sortedDates.length > 7 && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                * 최근 7일만 표시 중입니다. 모든 기록은 상단 “누적 {totalStudyDays}
+                일 공부” 버튼에서 날짜별로 확인할 수 있어요.
+              </Typography>
+            )}
           </Stack>
         </CardContent>
       </Card>
-    </Stack>
+
+      {/* 누적 공부일 팝업 다이얼로그 */}
+      <Dialog
+        open={openHistoryDialog}
+        onClose={() => setOpenHistoryDialog(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>지금까지 공부한 날짜</DialogTitle>
+        <DialogContent>
+          {!hasAnyHistory ? (
+            <Typography variant="body2" color="text.secondary">
+              아직 기록된 학습 날짜가 없습니다.
+            </Typography>
+          ) : (
+            <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                날짜를 선택하면 해당 날짜의 복습 내용이 아래 화면에 표시됩니다.
+              </Typography>
+
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 0.8,
+                  mt: 0.5,
+                }}
+              >
+                {sortedDates.map((key) => (
+                  <Chip
+                    key={key}
+                    size="small"
+                    label={formatDateLabel(key)}
+                    color={selectedDateKey === key ? "primary" : "default"}
+                    onClick={() => handleSelectFromDialog(key)}
+                  />
+                ))}
+              </Box>
+            </Stack>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -243,41 +243,43 @@ export default function RandomReview() {
     const cfg = toggleConfig[type];
     if (!cfg) return;
 
-    // 1) UI 업데이트
+    // 현재 선택된 날짜의 히스토리 스냅샷 기준으로 계산
+    const currentDoc = historyByKey.get(selectedDateKey);
+    if (!currentDoc) return;
+
+    const prevDone = currentDoc[cfg.doneKey] || [];
+    const prevKnown = currentDoc[cfg.knownKey] || [];
+
+    let nextDone = [...prevDone];
+    let nextKnown = [...prevKnown];
+
+    if (toMaster) {
+      // Done → Known
+      nextDone = nextDone.filter((x) => x !== id);
+      if (!nextKnown.includes(id)) nextKnown.push(id);
+    } else {
+      // Known → Done
+      nextKnown = nextKnown.filter((x) => x !== id);
+      if (!nextDone.includes(id)) nextDone.push(id);
+    }
+
+    // 1) UI 상태 업데이트 (optimistic)
     setHistoryDocs((prev) =>
-      prev.map((doc) => {
-        if (doc.dateKey !== selectedDateKey) return doc;
-
-        let done = [...(doc[cfg.doneKey] || [])];
-        let known = [...(doc[cfg.knownKey] || [])];
-
-        if (toMaster) {
-          // Done → Known
-          done = done.filter((x) => x !== id);
-          if (!known.includes(id)) known.push(id);
-        } else {
-          // Known → Done
-          known = known.filter((x) => x !== id);
-          if (!done.includes(id)) done.push(id);
-        }
-
-        return {
-          ...doc,
-          [cfg.doneKey]: done,
-          [cfg.knownKey]: known,
-        };
-      })
+      prev.map((doc) =>
+        doc.dateKey === selectedDateKey
+          ? {
+              ...doc,
+              [cfg.doneKey]: nextDone,
+              [cfg.knownKey]: nextKnown,
+            }
+          : doc
+      )
     );
 
-    // 2) Firestore 업데이트
+    // 2) Firestore에도 동일 값으로 반영
     await updateUserHistoryDoc(user.uid, selectedDateKey, {
-      [cfg.doneKey]: (selectedHistory[cfg.doneKey] || [])
-        .filter((x) => x !== id)
-        .concat(toMaster ? [] : [id]),
-
-      [cfg.knownKey]: (selectedHistory[cfg.knownKey] || [])
-        .filter((x) => x !== id)
-        .concat(toMaster ? [id] : []),
+      [cfg.doneKey]: nextDone,
+      [cfg.knownKey]: nextKnown,
     });
   };
 
@@ -323,15 +325,12 @@ export default function RandomReview() {
       return done.filter((it) => !known.has(normalizeId(it)));
     };
 
-    // obj 매핑
     const wordReview = collectForQuiz("wordsDone", "wordsKnown")
       .map((it) => resolveFromMap(it, wordMap))
       .filter(Boolean);
 
     const sentenceReview = collectForQuiz("sentencesDone", "sentencesKnown")
-      .map((it) =>
-        resolveFromMap(it, sentenceMap)
-      )
+      .map((it) => resolveFromMap(it, sentenceMap))
       .filter(Boolean);
 
     const grammarReview = collectForQuiz("grammarDone", "grammarKnown")
@@ -342,7 +341,6 @@ export default function RandomReview() {
       .map((it) => resolveFromMap(it, dialogMap))
       .filter(Boolean);
 
-    // 문제 생성
     const wordQs = wordReview.map((w) => {
       const correct = w.ko || w.meaning_ko || w.kr;
       const options = shuffle([

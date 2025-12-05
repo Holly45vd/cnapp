@@ -1,10 +1,7 @@
 // src/app/components/review/ReviewSections.jsx
 import React, { useMemo, useState } from "react";
-import { Stack, Card, CardContent, Typography } from "@mui/material";
-
-import ReviewSummaryPills from "./ReviewSummaryPills";
-import ReviewTypeSection from "./ReviewTypeSection";
-import ReviewDetailDialog from "./ReviewDetailDialog";
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material";
+import TypeContentCard from "./TypeContentCard";
 
 const TYPE_CONFIG = {
   word: { label: "단어", pillBg: "#EAF1FF", innerBg: "#FFFFFF" },
@@ -15,7 +12,7 @@ const TYPE_CONFIG = {
 
 export default function ReviewSections({
   selectedDateKey,
-  hasHistory, // 사용 안 해도 props 유지
+  hasHistory, // 지금은 안 씀. reviewItems 기준으로 판단.
   reviewItems,
   onSpeakWord,
   onSpeakSentence,
@@ -24,7 +21,6 @@ export default function ReviewSections({
 }) {
   const [activeType, setActiveType] = useState("word");
 
-  // 전체 카운트
   const counts = useMemo(() => {
     if (!reviewItems) {
       return {
@@ -54,7 +50,6 @@ export default function ReviewSections({
     };
   }, [reviewItems]);
 
-  // 알약용 진행률
   const progressCounts = useMemo(() => {
     if (!reviewItems) {
       return {
@@ -108,22 +103,6 @@ export default function ReviewSections({
     return keys.some((k) => (reviewItems[k]?.length || 0) > 0);
   }, [reviewItems]);
 
-  // 모달 상태
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailType, setDetailType] = useState("word");
-  const [detailItem, setDetailItem] = useState(null);
-
-  const openDetail = (typeKey, item) => {
-    setDetailType(typeKey);
-    setDetailItem(item);
-    setDetailOpen(true);
-  };
-
-  const closeDetail = () => {
-    setDetailOpen(false);
-    setDetailItem(null);
-  };
-
   const typeOrder = ["word", "sentence", "grammar", "dialog"];
 
   const getSpeakHandler = (typeKey) => {
@@ -135,30 +114,19 @@ export default function ReviewSections({
       case "dialog":
         return onSpeakDialog;
       default:
-        return undefined; // 문법은 TTS 생략
+        return undefined;
     }
   };
 
-  // 날짜를 안 골랐을 때
-  if (!selectedDateKey) {
-    return (
-      <Card>
-        <CardContent>
-          <Typography variant="body2" color="text.secondary">
-            복습할 날짜를 먼저 선택해주세요.
-          </Typography>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // 선택된 날짜에 진짜 아무 것도 없을 때
+  // 아무 항목도 없을 때만 기록 없음 표시
   if (!hasAnyItem) {
     return (
       <Card>
         <CardContent>
           <Typography variant="body2" color="text.secondary">
-            {selectedDateKey}에는 복습할 학습 내용이 아직 없습니다.
+            {selectedDateKey
+              ? `${selectedDateKey}에는 복습할 학습 내용이 아직 없습니다.`
+              : "복습할 날짜를 먼저 선택해주세요."}
           </Typography>
         </CardContent>
       </Card>
@@ -167,7 +135,6 @@ export default function ReviewSections({
 
   const activeCfg = TYPE_CONFIG[activeType];
   const activeLabel = activeCfg.label;
-
   const activeReview =
     reviewItems[
       activeType === "word"
@@ -178,7 +145,6 @@ export default function ReviewSections({
         ? "grammarReview"
         : "dialogReview"
     ] || [];
-
   const activeMaster =
     reviewItems[
       activeType === "word"
@@ -191,39 +157,82 @@ export default function ReviewSections({
     ] || [];
 
   return (
-    <>
-      <Stack spacing={2}>
-        {/* 상단 알약 요약 */}
-        <ReviewSummaryPills
-          selectedDateKey={selectedDateKey}
-          activeType={activeType}
-          onChangeType={setActiveType}
-          typeOrder={typeOrder}
-          typeConfig={TYPE_CONFIG}
-          progressCounts={progressCounts}
-        />
+    <Stack spacing={2}>
+      {/* 상단 알약 요약 */}
+      <Card>
+        <CardContent>
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              {selectedDateKey} 학습 복습
+            </Typography>
 
-        {/* 선택된 타입 상세 카드 */}
-        <ReviewTypeSection
-          typeKey={activeType}
-          label={activeLabel}
-          reviewItems={activeReview}
-          masterItems={activeMaster}
-          counts={counts[activeType]}
-          onSpeak={getSpeakHandler(activeType)}
-          onToggleStatus={onToggleStatus}
-          onOpenDetail={openDetail}
-        />
-      </Stack>
+            <Stack direction="row" spacing={1.5} justifyContent="center">
+              {typeOrder.map((key) => {
+                const cfg = TYPE_CONFIG[key];
+                const prog = progressCounts[key] || { done: 0, total: 0 };
+                const done = prog.done || 0;
+                const total = prog.total || 0;
+                const isActive = activeType === key;
 
-      {/* 상세 모달 */}
-      <ReviewDetailDialog
-        open={detailOpen}
-        onClose={closeDetail}
-        type={detailType}
-        item={detailItem}
-        onSpeak={getSpeakHandler(detailType)}
+                return (
+                  <Box
+                    key={key}
+                    onClick={() => setActiveType(key)}
+                    sx={{
+                      cursor: "pointer",
+                      borderRadius: "999px",
+                      px: 1.8,
+                      py: 1.3,
+                      minWidth: 70,
+                      bgcolor: cfg.pillBg,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: isActive
+                        ? "0 0 0 2px rgba(0,0,0,0.06)"
+                        : "none",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "#65708A", mb: 0.4 }}
+                    >
+                      {cfg.label}
+                    </Typography>
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        bgcolor: cfg.innerBg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 800,
+                        fontSize: 16,
+                      }}
+                    >
+                      {done}/{total}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* 선택된 타입 상세 */}
+      <TypeContentCard
+        typeKey={activeType}
+        label={activeLabel}
+        reviewItems={activeReview}
+        masterItems={activeMaster}
+        onSpeak={getSpeakHandler(activeType)}
+        onToggleStatus={onToggleStatus}
       />
-    </>
+    </Stack>
   );
 }
