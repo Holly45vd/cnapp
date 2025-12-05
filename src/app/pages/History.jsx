@@ -1,14 +1,9 @@
 // src/app/pages/History.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../providers/AuthProvider";
-import {
-  listUserHistoryAll,
-  listUserHistoryRange,
-} from "../../firebase/db";
-import {
-  getWeekDateKeys,
-  getLast7DateKeys,
-} from "../../shared/utils/date";
+import { listUserHistoryAll } from "../../firebase/db";
+import { getWeekDateKeys, getLast7DateKeys } from "../../shared/utils/date";
+import { useNavigate } from "react-router-dom";
 
 // MUI
 import {
@@ -20,12 +15,9 @@ import {
   Chip,
   Grid,
   LinearProgress,
-  Tabs,
-  Tab,
 } from "@mui/material";
 
 import BarChartIcon from "@mui/icons-material/BarChart";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import TodayIcon from "@mui/icons-material/Today";
 
 // 🔥 Weekly 상세 리스트 (지난 7일)
@@ -33,10 +25,13 @@ import WeeklyHistorySection from "../components/WeeklyHistorySection";
 
 export default function History() {
   const { user } = useAuth();
+  const nav = useNavigate();
+
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const weekKeys = useMemo(() => getWeekDateKeys(new Date()), []);
+  const last7Keys = useMemo(() => getLast7DateKeys(new Date()), []);
 
   useEffect(() => {
     if (!user) return;
@@ -52,52 +47,28 @@ export default function History() {
   }, [user]);
 
   // -----------------------------------
-  // 🔥 연속 학습 streak 계산
-  // -----------------------------------
-  const computeStreak = (docs) => {
-    if (!docs.length) return 0;
-
-    // 최신→과거 dateKey 정렬
-    const keys = docs
-      .map((d) => d.dateKey)
-      .sort((a, b) => b.localeCompare(a));
-
-    const keysSet = new Set(keys);
-
-    let streak = 0;
-    let cursor = new Date();
-
-    const toKey = (date) => date.toISOString().slice(0, 10);
-
-    const prev = (date) => {
-      const d = new Date(date);
-      d.setDate(d.getDate() - 1);
-      return d;
-    };
-
-    while (true) {
-      const key = toKey(cursor);
-      if (keysSet.has(key)) {
-        streak++;
-        cursor = prev(cursor);
-      } else {
-        break;
-      }
-    }
-    return streak;
-  };
-
-  // -----------------------------------
-  // 📊 통계 계산
+  // 📊 통계 + 지난 7일 트렌드
   // -----------------------------------
   const stats = useMemo(() => {
+    if (!docs.length) {
+      return {
+        weekDone: 0,
+        totalWords: 0,
+        totalSentences: 0,
+        totalGrammar: 0,
+        totalDialogs: 0,
+        totalDays: 0,
+        last7Trend: [],
+      };
+    }
+
     const byKey = new Map(docs.map((d) => [d.dateKey, d]));
 
-    // 이번 주
+    // 이번 주 문서
     const weekDocs = weekKeys.map((k) => byKey.get(k)).filter(Boolean);
     const weekDone = weekDocs.length;
 
-    // 누적
+    // 누적 합계
     const totalWords = docs.reduce(
       (s, d) => s + (d.wordsDone?.length || 0),
       0
@@ -116,7 +87,27 @@ export default function History() {
     );
 
     const totalDays = docs.length;
-    const streak = computeStreak(docs);
+
+    // 지난 7일 트렌드 (없어도 7칸은 고정 생성)
+    const last7Trend = last7Keys.map((key) => {
+      const doc = byKey.get(key);
+      if (!doc) {
+        return {
+          dateKey: key,
+          words: 0,
+          sentences: 0,
+          grammar: 0,
+          dialogs: 0,
+          total: 0,
+        };
+      }
+      const words = doc.wordsDone?.length || 0;
+      const sentences = doc.sentencesDone?.length || 0;
+      const grammar = doc.grammarDone?.length || 0;
+      const dialogs = doc.dialogsDone?.length || 0;
+      const total = words + sentences + grammar + dialogs;
+      return { dateKey: key, words, sentences, grammar, dialogs, total };
+    });
 
     return {
       weekDone,
@@ -125,12 +116,21 @@ export default function History() {
       totalGrammar,
       totalDialogs,
       totalDays,
-      streak,
+      last7Trend,
     };
-  }, [docs, weekKeys]);
+  }, [docs, weekKeys, last7Keys]);
 
   const weekGoal = 7;
-  const weekPct = Math.round((stats.weekDone / weekGoal) * 100);
+  const weekPct =
+    weekGoal === 0 ? 0 : Math.min(100, Math.round((stats.weekDone / weekGoal) * 100));
+
+  // 🔗 지난 7일 카드 클릭 → 복습 페이지로 이동 (해당 날짜 선택된 상태)
+  const handleSelectDateFromTrend = (dateKey) => {
+    if (!dateKey) return;
+    nav("/app/review", {
+      state: { dateKey },
+    });
+  };
 
   if (loading) {
     return (
@@ -143,7 +143,6 @@ export default function History() {
   return (
     <Box sx={{ minHeight: "100vh", p: 1 }}>
       <Stack spacing={2.5} sx={{ p: 1 }}>
-
         {/* 헤더 */}
         <Stack spacing={0.5}>
           <Typography variant="h5" fontWeight={800}>
@@ -185,31 +184,7 @@ export default function History() {
         </Card>
 
         {/* --------------------- */}
-        {/* 연속 학습 streak */}
-        {/* --------------------- */}
-        <Card>
-          <CardContent>
-            <Stack direction="row" spacing={1.2} alignItems="center">
-              <LocalFireDepartmentIcon color="warning" />
-              <Box>
-                <Typography fontWeight={800}>연속 학습</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  현재 {stats.streak}일 연속 학습 중
-                </Typography>
-              </Box>
-              <Box sx={{ flex: 1 }} />
-              <Chip
-                label={`${stats.streak} days`}
-                color="warning"
-                variant="outlined"
-                sx={{ fontWeight: 800 }}
-              />
-            </Stack>
-          </CardContent>
-        </Card>
-
-        {/* --------------------- */}
-        {/* 누적 성과 */}
+        {/* 누적 성과 – 홈 카드 스타일 */}
         {/* --------------------- */}
         <Card>
           <CardContent>
@@ -218,26 +193,26 @@ export default function History() {
                 <BarChartIcon fontSize="small" />
                 <Typography fontWeight={800}>누적 성과</Typography>
                 <Chip size="small" label="Total" />
+                <Typography variant="caption" color="text.secondary">
+                  누적 학습일: {stats.totalDays}일
+                </Typography>
               </Stack>
 
-              <Grid container spacing={1.5}>
-                <Grid item xs={3}>
-                  <MiniStat label="단어" value={stats.totalWords} />
-                </Grid>
-                <Grid item xs={3}>
-                  <MiniStat label="문장" value={stats.totalSentences} />
-                </Grid>
-                <Grid item xs={3}>
-                  <MiniStat label="문법" value={stats.totalGrammar} />
-                </Grid>
-                <Grid item xs={3}>
-                  <MiniStat label="회화" value={stats.totalDialogs} />
-                </Grid>
-              </Grid>
+<Grid container spacing={1.5} sx={{ display: "flex", justifyContent: "center" }}>
+  <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+    <TotalBubble label="단어" value={stats.totalWords} color="#EEF3FF" />
+  </Grid>
+  <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+    <TotalBubble label="문장" value={stats.totalSentences} color="#EAF5FF" />
+  </Grid>
+  <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+    <TotalBubble label="문법" value={stats.totalGrammar} color="#FFF4E2" />
+  </Grid>
+  <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+    <TotalBubble label="회화" value={stats.totalDialogs} color="#E9FBF1" />
+  </Grid>
+</Grid>
 
-              <Typography variant="caption" color="text.secondary">
-                누적 학습일: {stats.totalDays}일
-              </Typography>
             </Stack>
           </CardContent>
         </Card>
@@ -247,17 +222,19 @@ export default function History() {
         {/* --------------------- */}
         <Card>
           <CardContent>
-            <WeeklyHistorySection />
+            <WeeklyHistorySection
+              trend={stats.last7Trend}
+              onSelectDate={handleSelectDateFromTrend}
+            />
           </CardContent>
         </Card>
-
       </Stack>
     </Box>
   );
 }
 
 // --------------------------------
-// 🔹 MiniStat 컴포넌트
+// 🔹 MiniStat – 작은 숫자 카드
 // --------------------------------
 function MiniStat({ label, value }) {
   return (
@@ -276,6 +253,47 @@ function MiniStat({ label, value }) {
       <Typography variant="h6" fontWeight={800}>
         {value}
       </Typography>
+    </Box>
+  );
+}
+
+// --------------------------------
+// 🔹 TotalBubble – 홈 스타일 누적 버블
+// --------------------------------
+function TotalBubble({ label, value, color }) {
+  return (
+    <Box
+      sx={{
+        bgcolor: color || "grey.50",
+        borderRadius: "999px",
+        p: 1.2,
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid #eef0f5",
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.3 }}>
+        {label}
+      </Typography>
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "white",
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.7)",
+        }}
+      >
+        <Typography variant="h6" fontWeight={800}>
+          {value}
+        </Typography>
+      </Box>
     </Box>
   );
 }

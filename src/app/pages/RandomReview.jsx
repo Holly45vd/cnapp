@@ -1,39 +1,96 @@
+// src/app/pages/RandomReview.jsx
+
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../providers/AuthProvider";
-import { listUserHistoryAll, listCollection } from "../../firebase/db";
 import {
-  freeTextPinyinToKorean,
-  pinyinArrayToKorean,
-} from "../../lib/pinyinKorean";
-import { speakZh } from "../../lib/ttsHelper"; // 🔊 중국어 TTS 추가
+  useNavigate,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
+import { useAuth } from "../../providers/AuthProvider";
+import {
+  listUserHistoryAll,
+  listCollection,
+  updateUserHistoryDoc,
+} from "../../firebase/db";
+
+import { getLast7DateKeys } from "../../shared/utils/date";
+import { speakZh } from "../../lib/ttsHelper";
 
 // MUI
 import {
   Box,
+  Stack,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  Stack,
-  Button,
+  Tabs,
+  Tab,
   Chip,
-  Divider,
-  Grid,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
+  Button,
 } from "@mui/material";
 
 import ReplayIcon from "@mui/icons-material/Replay";
+import QuizIcon from "@mui/icons-material/Quiz";
 import HomeIcon from "@mui/icons-material/Home";
-import TodayIcon from "@mui/icons-material/Today";
+
+// Components
+import ReviewDateSelector from "../components/review/ReviewDateSelector";
+import ReviewSections from "../components/review/ReviewSections";
+import RandomQuizPanel from "../components/review/RandomQuizPanel";
+
+const TAB_REVIEW = "review";
+const TAB_QUIZ = "quiz";
+
+/* ---------------------------------------
+   공통 유틸
+--------------------------------------- */
+
+function normalizeId(item) {
+  if (!item) return null;
+  if (typeof item === "string") return item;
+  return (
+    item.wordId ||
+    item.sentenceId ||
+    item.grammarId ||
+    item.dialogId ||
+    item.id ||
+    null
+  );
+}
+
+function resolveFromMap(item, map) {
+  if (!item) return null;
+  if (typeof item === "object" && item.zh) return item;
+  const id = normalizeId(item);
+  return id ? map.get(id) : null;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ---------------------------------------
+   페이지 시작
+--------------------------------------- */
 
 export default function RandomReview() {
-  const nav = useNavigate();
   const { user } = useAuth();
+  const nav = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const [tab, setTab] = useState(() => {
+    const mode = searchParams.get("mode");
+    return mode === TAB_QUIZ ? TAB_QUIZ : TAB_REVIEW;
+  });
 
   const [loading, setLoading] = useState(true);
+
   const [historyDocs, setHistoryDocs] = useState([]);
   const [words, setWords] = useState([]);
   const [grammar, setGrammar] = useState([]);
@@ -41,70 +98,71 @@ export default function RandomReview() {
   const [sentences, setSentences] = useState([]);
 
   const [selectedDateKey, setSelectedDateKey] = useState("");
-  const [dateSelectorOpen, setDateSelectorOpen] = useState(false);
 
+  const last7Keys = useMemo(() => getLast7DateKeys(new Date()), []);
+
+  /* ---------------------------------------
+     데이터 로딩
+  --------------------------------------- */
+  useEffect(() => {
+    if (!user) return;
+
+    (async () => {
+      setLoading(true);
+
+      const [
+        allHistory,
+        allWords,
+        allGrammar,
+        allDialogs,
+        allSentences,
+      ] = await Promise.all([
+        listUserHistoryAll(user.uid),
+        listCollection("words"),
+        listCollection("grammar"),
+        listCollection("dialogs"),
+        listCollection("sentences"),
+      ]);
+
+      setHistoryDocs(allHistory);
+      setWords(allWords);
+      setGrammar(allGrammar);
+      setDialogs(allDialogs);
+      setSentences(allSentences);
+
+      // 기본 선택 날짜 로직
+      if (allHistory.length > 0) {
+        const fromStateKey = location.state?.dateKey;
+        const todayKey = new Date().toISOString().slice(0, 10);
+
+        let initialKey = "";
+
+        if (fromStateKey && allHistory.some((h) => h.dateKey === fromStateKey)) {
+          initialKey = fromStateKey;
+        } else if (allHistory.some((h) => h.dateKey === todayKey)) {
+          initialKey = todayKey;
+        } else {
+          initialKey = [...allHistory].sort((a, b) =>
+            b.dateKey.localeCompare(a.dateKey)
+          )[0].dateKey;
+        }
+
+        setSelectedDateKey(initialKey);
+      }
+
+      setLoading(false);
+    })();
+  }, [user, location.state]);
+
+  /* ---------------------------------------
+     맵 구성
+  --------------------------------------- */
   const historyByKey = useMemo(
     () => new Map(historyDocs.map((d) => [d.dateKey, d])),
     [historyDocs]
   );
 
-  const selectedHistory = selectedDateKey
-    ? historyByKey.get(selectedDateKey)
-    : null;
-
-  // 초기 데이터 로딩
-  useEffect(() => {
-    if (!user) return;
-
-    (async () => {
-      try {
-        setLoading(true);
-
-        const [
-          allHistory,
-          allWords,
-          allGrammar,
-          allDialogs,
-          allSentences,
-        ] = await Promise.all([
-          listUserHistoryAll(user.uid),
-          listCollection("words"),
-          listCollection("grammar"),
-          listCollection("dialogs"),
-          listCollection("sentences"),
-        ]);
-
-        setHistoryDocs(allHistory);
-        setWords(allWords);
-        setGrammar(allGrammar);
-        setDialogs(allDialogs);
-        setSentences(allSentences);
-
-        // 기본 선택 날짜: 오늘 있으면 오늘, 아니면 최근 날짜
-        if (allHistory.length > 0) {
-          const todayKey = new Date().toISOString().slice(0, 10);
-          const hasToday = allHistory.some((h) => h.dateKey === todayKey);
-
-          if (hasToday) {
-            setSelectedDateKey(todayKey);
-          } else {
-            const sorted = [...allHistory].sort((a, b) =>
-              b.dateKey.localeCompare(a.dateKey)
-            );
-            setSelectedDateKey(sorted[0].dateKey);
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
-
-  // ID → 객체 맵
-  const wordMap = useMemo(
-    () => new Map(words.map((w) => [w.wordId, w])),
-    [words]
-  );
+  const wordMap = useMemo(() => new Map(words.map((w) => [w.wordId, w])), [words]);
   const grammarMap = useMemo(
     () => new Map(grammar.map((g) => [g.grammarId, g])),
     [grammar]
@@ -115,20 +173,27 @@ export default function RandomReview() {
   );
   const sentenceMap = useMemo(
     () =>
-      new Map(
-        sentences.map((s) => [
-          s.sentenceId || s.id, // 둘 다 대응
-          s,
-        ])
-      ),
+      new Map(sentences.map((s) => [s.sentenceId || s.id, s])),
     [sentences]
   );
 
-  // --------------------------------
-  // 선택한 날짜의 “다시보기 / 외웠음” 분리
-  // --------------------------------
+  const selectedHistory = selectedDateKey
+    ? historyByKey.get(selectedDateKey)
+    : null;
+
+  const availableDates = useMemo(
+    () =>
+      historyDocs
+        .map((h) => h.dateKey)
+        .sort((a, b) => b.localeCompare(a)),
+    [historyDocs]
+  );
+
+  /* ---------------------------------------
+     복습 대상 분리 (Done / Known 기준)
+  --------------------------------------- */
   const reviewItems = useMemo(() => {
-    if (!selectedHistory) {
+    if (!selectedHistory)
       return {
         wordReview: [],
         wordMaster: [],
@@ -139,80 +204,293 @@ export default function RandomReview() {
         dialogReview: [],
         dialogMaster: [],
       };
-    }
 
-    // 단어: 다시보기 / 외웠음
-    const wordReviewIds =
-      selectedHistory.wordsReview || selectedHistory.wordsDone || [];
-    const wordMasterIds =
-      selectedHistory.wordsMastered || selectedHistory.wordsKnown || [];
-
-    const wordReview = wordReviewIds
-      .map((id) => wordMap.get(id))
-      .filter(Boolean);
-    const wordMaster = wordMasterIds
-      .map((id) => wordMap.get(id))
-      .filter(Boolean);
-
-    // 문장: 다시보기 / 외웠음
-    const sentenceReviewIds =
-      selectedHistory.sentencesReview ||
-      selectedHistory.sentencesDone ||
-      selectedHistory.sentenceDone ||
-      [];
-    const sentenceMasterIds =
-      selectedHistory.sentencesMastered ||
-      selectedHistory.sentencesKnown ||
-      [];
-
-    const sentenceReview = sentenceReviewIds
-      .map((id) => sentenceMap.get(id))
-      .filter(Boolean);
-    const sentenceMaster = sentenceMasterIds
-      .map((id) => sentenceMap.get(id))
-      .filter(Boolean);
-
-    // 문법: 다시보기 / 외웠음
-    const grammarReviewIds =
-      selectedHistory.grammarReview || selectedHistory.grammarDone || [];
-    const grammarMasterIds =
-      selectedHistory.grammarMastered || selectedHistory.grammarKnown || [];
-
-    const grammarReview = grammarReviewIds
-      .map((id) => grammarMap.get(id))
-      .filter(Boolean);
-    const grammarMaster = grammarMasterIds
-      .map((id) => grammarMap.get(id))
-      .filter(Boolean);
-
-    // 회화: 다시보기 / 외웠음
-    const dialogReviewIds =
-      selectedHistory.dialogsReview || selectedHistory.dialogsDone || [];
-    const dialogMasterIds =
-      selectedHistory.dialogsMastered || selectedHistory.dialogsKnown || [];
-
-    const dialogReview = dialogReviewIds
-      .map((id) => dialogMap.get(id))
-      .filter(Boolean);
-    const dialogMaster = dialogMasterIds
-      .map((id) => dialogMap.get(id))
-      .filter(Boolean);
+    const mapIds = (ids, map) =>
+      (ids || []).map((it) => resolveFromMap(it, map)).filter(Boolean);
 
     return {
-      wordReview,
-      wordMaster,
-      sentenceReview,
-      sentenceMaster,
-      grammarReview,
-      grammarMaster,
-      dialogReview,
-      dialogMaster,
+      wordReview: mapIds(selectedHistory.wordsDone, wordMap),
+      wordMaster: mapIds(selectedHistory.wordsKnown, wordMap),
+
+      sentenceReview: mapIds(selectedHistory.sentencesDone, sentenceMap),
+      sentenceMaster: mapIds(selectedHistory.sentencesKnown, sentenceMap),
+
+      grammarReview: mapIds(selectedHistory.grammarDone, grammarMap),
+      grammarMaster: mapIds(selectedHistory.grammarKnown, grammarMap),
+
+      dialogReview: mapIds(selectedHistory.dialogsDone, dialogMap),
+      dialogMaster: mapIds(selectedHistory.dialogsKnown, dialogMap),
     };
   }, [selectedHistory, wordMap, sentenceMap, grammarMap, dialogMap]);
 
+  /* ---------------------------------------
+     🔁 토글 (Done ↔ Known)
+  --------------------------------------- */
+
+  const toggleConfig = {
+    word: { doneKey: "wordsDone", knownKey: "wordsKnown" },
+    sentence: { doneKey: "sentencesDone", knownKey: "sentencesKnown" },
+    grammar: { doneKey: "grammarDone", knownKey: "grammarKnown" },
+    dialog: { doneKey: "dialogsDone", knownKey: "dialogsKnown" },
+  };
+
+  const handleToggleReviewStatus = async (type, item, toMaster) => {
+    if (!selectedDateKey || !user) return;
+
+    const id = normalizeId(item);
+    if (!id) return;
+
+    const cfg = toggleConfig[type];
+    if (!cfg) return;
+
+    // 1) UI 업데이트
+    setHistoryDocs((prev) =>
+      prev.map((doc) => {
+        if (doc.dateKey !== selectedDateKey) return doc;
+
+        let done = [...(doc[cfg.doneKey] || [])];
+        let known = [...(doc[cfg.knownKey] || [])];
+
+        if (toMaster) {
+          // Done → Known
+          done = done.filter((x) => x !== id);
+          if (!known.includes(id)) known.push(id);
+        } else {
+          // Known → Done
+          known = known.filter((x) => x !== id);
+          if (!done.includes(id)) done.push(id);
+        }
+
+        return {
+          ...doc,
+          [cfg.doneKey]: done,
+          [cfg.knownKey]: known,
+        };
+      })
+    );
+
+    // 2) Firestore 업데이트
+    await updateUserHistoryDoc(user.uid, selectedDateKey, {
+      [cfg.doneKey]: (selectedHistory[cfg.doneKey] || [])
+        .filter((x) => x !== id)
+        .concat(toMaster ? [] : [id]),
+
+      [cfg.knownKey]: (selectedHistory[cfg.knownKey] || [])
+        .filter((x) => x !== id)
+        .concat(toMaster ? [id] : []),
+    });
+  };
+
+  /* ---------------------------------------
+     TTS
+  --------------------------------------- */
+
+  const handleSpeakWord = (w) => speakZh(w?.audio?.ttsText || w?.zh || "");
+  const handleSpeakSentence = (s) =>
+    speakZh(s?.audio?.ttsText || s?.zh || "");
+  const handleSpeakDialog = (d) =>
+    speakZh(
+      (d?.lines || [])
+        .map((l) => l.zh)
+        .filter(Boolean)
+        .join(" ")
+    );
+
+  /* ---------------------------------------
+     지난 7일 랜덤 퀴즈 생성
+  --------------------------------------- */
+
+  const quizQuestions = useMemo(() => {
+    if (!historyDocs.length) return [];
+
+    const byKey = new Map(historyDocs.map((d) => [d.dateKey, d]));
+    const last7Docs = last7Keys.map((k) => byKey.get(k)).filter(Boolean);
+
+    const mergeUnique = (arr) => {
+      const map = new Map();
+      for (const it of arr) {
+        const id = normalizeId(it);
+        if (id && !map.has(id)) map.set(id, it);
+      }
+      return [...map.values()];
+    };
+
+    const collectForQuiz = (doneKey, knownKey) => {
+      const done = mergeUnique(last7Docs.flatMap((d) => d[doneKey] || []));
+      const known = new Set(
+        last7Docs.flatMap((d) => d[knownKey] || []).map(normalizeId)
+      );
+      return done.filter((it) => !known.has(normalizeId(it)));
+    };
+
+    // obj 매핑
+    const wordReview = collectForQuiz("wordsDone", "wordsKnown")
+      .map((it) => resolveFromMap(it, wordMap))
+      .filter(Boolean);
+
+    const sentenceReview = collectForQuiz("sentencesDone", "sentencesKnown")
+      .map((it) =>
+        resolveFromMap(it, sentenceMap)
+      )
+      .filter(Boolean);
+
+    const grammarReview = collectForQuiz("grammarDone", "grammarKnown")
+      .map((it) => resolveFromMap(it, grammarMap))
+      .filter(Boolean);
+
+    const dialogReview = collectForQuiz("dialogsDone", "dialogsKnown")
+      .map((it) => resolveFromMap(it, dialogMap))
+      .filter(Boolean);
+
+    // 문제 생성
+    const wordQs = wordReview.map((w) => {
+      const correct = w.ko || w.meaning_ko || w.kr;
+      const options = shuffle([
+        correct,
+        ...shuffle(
+          wordReview
+            .map((x) => x.ko || x.meaning_ko)
+            .filter((x) => x && x !== correct)
+        ).slice(0, 3),
+      ]);
+      return {
+        id: normalizeId(w),
+        type: "word",
+        stem: w.zh,
+        stemSub: w.pinyin || "",
+        prompt: "단어 의미를 고르세요",
+        correct,
+        options,
+      };
+    });
+
+    const sentenceQs = sentenceReview.map((s) => {
+      const correct = s.ko;
+      const options = shuffle([
+        correct,
+        ...shuffle(
+          sentenceReview
+            .map((x) => x.ko)
+            .filter((x) => x && x !== correct)
+        ).slice(0, 3),
+      ]);
+
+      return {
+        id: normalizeId(s),
+        type: "sentence",
+        stem: s.zh,
+        stemSub: s.pinyin || "",
+        prompt: "문장 의미를 고르세요",
+        correct,
+        options,
+      };
+    });
+
+    const grammarQs = grammarReview.map((g) => {
+      const correct = g.meaning_ko;
+      const options = shuffle([
+        correct,
+        ...shuffle(
+          grammarReview
+            .map((x) => x.meaning_ko)
+            .filter((x) => x && x !== correct)
+        ).slice(0, 3),
+      ]);
+
+      return {
+        id: normalizeId(g),
+        type: "grammar",
+        stem: g.title || g.shortTitle || g.corePattern || "",
+        stemSub: g.corePattern || "",
+        prompt: "문법 뜻을 고르세요",
+        correct,
+        options,
+      };
+    });
+
+    const dialogQs = dialogReview
+      .map((d) => {
+        const zh = (d.lines || []).map((l) => l.zh).join(" / ");
+        const ko = (d.lines || []).map((l) => l.ko).join(" / ");
+        if (!zh || !ko) return null;
+
+        const correct = ko;
+        const options = shuffle([
+          correct,
+          ...shuffle(
+            dialogReview
+              .map(
+                (x) => (x.lines || []).map((l) => l.ko).join(" / ")
+              )
+              .filter((x) => x && x !== correct)
+          ).slice(0, 3),
+        ]);
+
+        return {
+          id: normalizeId(d),
+          type: "dialog",
+          stem: zh,
+          stemSub: "",
+          prompt: "대화 전체 의미를 고르세요",
+          correct,
+          options,
+        };
+      })
+      .filter(Boolean);
+
+    return shuffle([...wordQs, ...sentenceQs, ...grammarQs, ...dialogQs]).slice(
+      0,
+      10
+    );
+  }, [historyDocs, last7Keys, wordMap, sentenceMap, grammarMap, dialogMap]);
+
+  /* ---------------------------------------
+     퀴즈 상태
+  --------------------------------------- */
+
+  const [quizIdx, setQuizIdx] = useState(0);
+  const [quizSelected, setQuizSelected] = useState(null);
+  const [quizIsCorrect, setQuizIsCorrect] = useState(null);
+  const [quizFinished, setQuizFinished] = useState(false);
+  const [quizCorrectCount, setQuizCorrectCount] = useState(0);
+
+  useEffect(() => {
+    setQuizIdx(0);
+    setQuizSelected(null);
+    setQuizIsCorrect(null);
+    setQuizFinished(false);
+    setQuizCorrectCount(0);
+  }, [quizQuestions]);
+
+  const currentQuestion = quizQuestions[quizIdx] || null;
+
+  const handleQuizSelect = (opt) => {
+    if (!currentQuestion || quizFinished) return;
+    if (quizSelected != null) return;
+
+    setQuizSelected(opt);
+    const isOk = opt === currentQuestion.correct;
+    setQuizIsCorrect(isOk);
+    if (isOk) setQuizCorrectCount((c) => c + 1);
+  };
+
+  const handleQuizNext = () => {
+    if (quizIdx + 1 >= quizQuestions.length) {
+      setQuizFinished(true);
+    } else {
+      setQuizIdx((idx) => idx + 1);
+      setQuizSelected(null);
+      setQuizIsCorrect(null);
+    }
+  };
+
+  /* ---------------------------------------
+     렌더링
+  --------------------------------------- */
+
   if (!user) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 2 }}>
+      <Box sx={{ minHeight: "100vh", p: 2 }}>
         <Typography>로그인이 필요합니다.</Typography>
       </Box>
     );
@@ -220,63 +498,11 @@ export default function RandomReview() {
 
   if (loading) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 2 }}>
+      <Box sx={{ minHeight: "100vh", p: 2 }}>
         <Typography>복습 데이터를 불러오는 중...</Typography>
       </Box>
     );
   }
-
-  const availableDates = historyDocs
-    .map((h) => h.dateKey)
-    .sort((a, b) => b.localeCompare(a)); // 최신 → 과거
-
-  const {
-    wordReview,
-    wordMaster,
-    sentenceReview,
-    sentenceMaster,
-    grammarReview,
-    grammarMaster,
-    dialogReview,
-    dialogMaster,
-  } = reviewItems;
-
-  // 🔊 단어 클릭 시 중국어(또는 TTS용 텍스트) 읽기
-  const handleSpeakWord = (w) => {
-    const text = w?.audio?.ttsText || w?.zh || "";
-    if (!text) return;
-    speakZh(text);
-  };
-
-  // 🔊 문장 클릭 시
-  const handleSpeakSentence = (s) => {
-    const text = s?.audio?.ttsText || s?.zh || "";
-    if (!text) return;
-    speakZh(text);
-  };
-
-  // 🔊 회화 카드 클릭 시 – 해당 회화의 중국어 줄 전부 이어서 읽기
-  const handleSpeakDialog = (d) => {
-    const zhAll = (d?.lines || [])
-      .map((l) => l.zh)
-      .filter(Boolean)
-      .join(" ");
-    if (!zhAll) return;
-    speakZh(zhAll);
-  };
-
-  const SectionCard = ({ title, color, children }) => (
-    <Card>
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip size="small" label={title} color={color} />
-          </Stack>
-          {children}
-        </Stack>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", p: 1 }}>
@@ -287,633 +513,77 @@ export default function RandomReview() {
           <Typography variant="h5" fontWeight={800}>
             복습하기
           </Typography>
-          <Chip size="small" label="날짜별" />
+          <Chip size="small" label="지난 기록 기반" />
+          <Box sx={{ flex: 1 }} />
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<HomeIcon />}
+            onClick={() => nav("/app")}
+          >
+            홈
+          </Button>
         </Stack>
 
-        {/* 안내 */}
-        <Typography variant="body2" color="text.secondary">
-          날짜를 선택하면, 그날 학습했던 단어·문장·문법·회화를{" "}
-          <b>다시보기 / 외웠음</b>으로 나눠서 볼 수 있어. 카드 자체를 누르면
-          중국어 발음을 들을 수 있어.
-        </Typography>
-
-        {/* 날짜 선택 카드 */}
+        {/* 탭 */}
         <Card>
-          <CardContent>
-            <Stack spacing={1.5}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <TodayIcon fontSize="small" />
-                <Typography fontWeight={800}>날짜 선택</Typography>
-                <Chip
-                  size="small"
-                  clickable
-                  label={
-                    availableDates.length
-                      ? `${availableDates.length}일 학습 기록`
-                      : "기록 없음"
-                  }
-                  onClick={() => {
-                    if (availableDates.length > 0) {
-                      setDateSelectorOpen(true);
-                    }
-                  }}
-                />
-              </Stack>
-
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <TextField
-                  label="날짜"
-                  type="date"
-                  size="small"
-                  value={selectedDateKey || ""}
-                  onChange={(e) => setSelectedDateKey(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ maxWidth: 220 }}
-                />
-              </Stack>
-
-              {!selectedHistory && (
-                <Typography variant="caption" color="text.secondary">
-                  선택한 날짜({selectedDateKey || "미선택"})에는 학습 기록이
-                  없습니다.
-                </Typography>
-              )}
-
-              {selectedHistory && (
-                <Typography variant="caption" color="text.secondary">
-                  {selectedDateKey} 학습 기록이 있습니다.
-                </Typography>
-              )}
-            </Stack>
+          <CardContent sx={{ pb: 0 }}>
+            <Tabs
+              value={tab}
+              onChange={(_, v) => setTab(v)}
+              variant="fullWidth"
+            >
+              <Tab
+                value={TAB_REVIEW}
+                icon={<ReplayIcon fontSize="small" />}
+                iconPosition="start"
+                label="날짜별 복습"
+              />
+              <Tab
+                value={TAB_QUIZ}
+                icon={<QuizIcon fontSize="small" />}
+                iconPosition="start"
+                label="랜덤 퀴즈"
+              />
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* 날짜 선택 모달 */}
-        <Dialog
-          open={dateSelectorOpen}
-          onClose={() => setDateSelectorOpen(false)}
-          fullWidth
-          maxWidth="xs"
-        >
-          <DialogTitle>학습 날짜 선택</DialogTitle>
-          <DialogContent>
-            <Stack spacing={0.75} sx={{ mt: 1, pb: 1 }}>
-              {availableDates.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  아직 학습 기록이 없습니다.
-                </Typography>
-              )}
-              {availableDates.map((d) => (
-                <Chip
-                  key={d}
-                  label={d}
-                  size="small"
-                  clickable
-                  color={d === selectedDateKey ? "primary" : "default"}
-                  onClick={() => {
-                    setSelectedDateKey(d);
-                    setDateSelectorOpen(false);
-                  }}
-                  sx={{ mb: 0.5 }}
-                />
-              ))}
-            </Stack>
-          </DialogContent>
-        </Dialog>
+        {/* REVIEW 탭 */}
+        {tab === TAB_REVIEW && (
+          <>
+            <ReviewDateSelector
+              selectedDateKey={selectedDateKey}
+              onChangeDateKey={setSelectedDateKey}
+              availableDates={availableDates}
+            />
 
-        {/* ---------------- 단어: 다시보기 ---------------- */}
-        <SectionCard title="단어 (다시보기)" color="warning">
-          {wordReview.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              다시 볼 단어가 없습니다.
-            </Typography>
-          ) : (
-            <Grid container spacing={1.2}>
-              {wordReview.map((w) => {
-                const koPron =
-                  w.koPron ||
-                  (w.syllables?.length
-                    ? pinyinArrayToKorean(w.syllables)
-                    : w.pinyin
-                    ? freeTextPinyinToKorean(w.pinyin)
-                    : "");
+            <ReviewSections
+              selectedDateKey={selectedDateKey}
+              hasHistory={!!selectedHistory}
+              reviewItems={reviewItems}
+              onSpeakWord={handleSpeakWord}
+              onSpeakSentence={handleSpeakSentence}
+              onSpeakDialog={handleSpeakDialog}
+              onToggleStatus={handleToggleReviewStatus}
+            />
+          </>
+        )}
 
-                const meaning =
-                  w.ko || w.meaning_ko || w.meaningKr || w.kr || "";
-
-                return (
-                  <Grid item xs={12} sm={4} key={w.wordId}>
-                    <Box
-                      onClick={() => handleSpeakWord(w)}
-                      role="button"
-                      tabIndex={0}
-                      sx={{
-                        borderRadius: 2,
-                        border: "1px solid #eee",
-                        p: 1.3,
-                        bgcolor: "#FFF7E8",
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#FFECCB" },
-                      }}
-                    >
-                      <Typography fontWeight={800}>{w.zh}</Typography>
-                      {meaning && (
-                        <Typography sx={{ mt: 0.1 }}>{meaning}</Typography>
-                      )}
-                      {w.pinyin && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mt: 0.2 }}
-                        >
-                          {w.pinyin}
-                        </Typography>
-                      )}
-                      {koPron && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ mt: 0.2, display: "block" }}
-                        >
-                          {koPron}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Grid>
-                );
-              })}
-            </Grid>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 단어: 외웠음 ---------------- */}
-        <SectionCard title="단어 (외웠음)" color="success">
-          {wordMaster.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              외웠다고 표시한 단어가 없습니다.
-            </Typography>
-          ) : (
-            <Grid container spacing={1.2}>
-              {wordMaster.map((w) => {
-                const koPron =
-                  w.koPron ||
-                  (w.syllables?.length
-                    ? pinyinArrayToKorean(w.syllables)
-                    : w.pinyin
-                    ? freeTextPinyinToKorean(w.pinyin)
-                    : "");
-
-                const meaning =
-                  w.ko || w.meaning_ko || w.meaningKr || w.kr || "";
-
-                return (
-                  <Grid item xs={12} sm={4} key={w.wordId}>
-                    <Box
-                      onClick={() => handleSpeakWord(w)}
-                      role="button"
-                      tabIndex={0}
-                      sx={{
-                        borderRadius: 2,
-                        border: "1px solid #eee",
-                        p: 1.3,
-                        bgcolor: "#E8FFF3",
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#D4FBE7" },
-                      }}
-                    >
-                      <Typography fontWeight={800}>{w.zh}</Typography>
-                      {meaning && (
-                        <Typography sx={{ mt: 0.1 }}>{meaning}</Typography>
-                      )}
-                      {w.pinyin && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mt: 0.2 }}
-                        >
-                          {w.pinyin}
-                        </Typography>
-                      )}
-                      {koPron && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ mt: 0.2, display: "block" }}
-                        >
-                          {koPron}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Grid>
-                );
-              })}
-            </Grid>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 문장: 다시보기 ---------------- */}
-        <SectionCard title="문장 (다시보기)" color="warning">
-          {sentenceReview.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              다시 볼 문장이 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {sentenceReview.map((s) => {
-                const pinyin = s.pinyin || "";
-                const koPron = pinyin ? freeTextPinyinToKorean(pinyin) : "";
-
-                return (
-                  <Box
-                    key={s.sentenceId || s.id}
-                    onClick={() => handleSpeakSentence(s)}
-                    role="button"
-                    tabIndex={0}
-                    sx={{
-                      borderRadius: 2,
-                      border: "1px solid #eee",
-                      p: 1.3,
-                      bgcolor: "#FFF7E8",
-                      cursor: "pointer",
-                      "&:hover": { bgcolor: "#FFECCB" },
-                    }}
-                  >
-                    <Typography fontWeight={800}>{s.zh}</Typography>
-                    {pinyin && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mt: 0.2 }}
-                      >
-                        {pinyin}
-                      </Typography>
-                    )}
-                    {koPron && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 0.2, display: "block" }}
-                      >
-                        {koPron}
-                      </Typography>
-                    )}
-                    {s.ko && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mt: 0.2 }}
-                      >
-                        {s.ko}
-                      </Typography>
-                    )}
-                  </Box>
-                );
-              })}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 문장: 외웠음 ---------------- */}
-        <SectionCard title="문장 (외웠음)" color="success">
-          {sentenceMaster.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              외웠다고 표시한 문장이 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {sentenceMaster.map((s) => {
-                const pinyin = s.pinyin || "";
-                const koPron = pinyin ? freeTextPinyinToKorean(pinyin) : "";
-
-                return (
-                  <Box
-                    key={s.sentenceId || s.id}
-                    onClick={() => handleSpeakSentence(s)}
-                    role="button"
-                    tabIndex={0}
-                    sx={{
-                      borderRadius: 2,
-                      border: "1px solid #eee",
-                      p: 1.3,
-                      bgcolor: "#E8FFF3",
-                      cursor: "pointer",
-                      "&:hover": { bgcolor: "#D4FBE7" },
-                    }}
-                  >
-                    <Typography fontWeight={800}>{s.zh}</Typography>
-                    {pinyin && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mt: 0.2 }}
-                      >
-                        {pinyin}
-                      </Typography>
-                    )}
-                    {koPron && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 0.2, display: "block" }}
-                      >
-                        {koPron}
-                      </Typography>
-                    )}
-                    {s.ko && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mt: 0.2 }}
-                      >
-                        {s.ko}
-                      </Typography>
-                    )}
-                  </Box>
-                );
-              })}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 문법: 다시보기 ---------------- */}
-        <SectionCard title="문법 (다시보기)" color="warning">
-          {grammarReview.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              다시 볼 문법이 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {grammarReview.map((g) => (
-                <Box
-                  key={g.grammarId}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid #eee",
-                    p: 1.3,
-                    bgcolor: "#FFF7E8",
-                  }}
-                >
-                  <Typography fontWeight={800}>
-                    {g.title || g.shortTitle}
-                  </Typography>
-                  {g.corePattern && (
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        mt: 0.3,
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {g.corePattern}
-                    </Typography>
-                  )}
-                  {g.meaning_ko && (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mt: 0.3 }}
-                    >
-                      {g.meaning_ko}
-                    </Typography>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 문법: 외웠음 ---------------- */}
-        <SectionCard title="문법 (외웠음)" color="success">
-          {grammarMaster.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              외웠다고 표시한 문법이 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {grammarMaster.map((g) => (
-                <Box
-                  key={g.grammarId}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid #eee",
-                    p: 1.3,
-                    bgcolor: "#E8FFF3",
-                  }}
-                >
-                  <Typography fontWeight={800}>
-                    {g.title || g.shortTitle}
-                  </Typography>
-                  {g.corePattern && (
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        mt: 0.3,
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {g.corePattern}
-                    </Typography>
-                  )}
-                  {g.meaning_ko && (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mt: 0.3 }}
-                    >
-                      {g.meaning_ko}
-                    </Typography>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 회화: 다시보기 ---------------- */}
-        <SectionCard title="회화 (다시보기)" color="warning">
-          {dialogReview.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              다시 볼 회화가 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {dialogReview.map((d) => (
-                <Box
-                  key={d.dialogId}
-                  onClick={() => handleSpeakDialog(d)}
-                  role="button"
-                  tabIndex={0}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid #eee",
-                    p: 1.3,
-                    bgcolor: "#FFF7E8",
-                    cursor: "pointer",
-                    "&:hover": { bgcolor: "#FFECCB" },
-                  }}
-                >
-                  {d.topic && (
-                    <Typography variant="caption" color="text.secondary">
-                      {d.topic}
-                    </Typography>
-                  )}
-                  <Divider sx={{ my: 0.5 }} />
-
-                  {(d.lines || []).slice(0, 3).map((l, idx) => {
-                    const pinyin = l.pinyin || "";
-                    const koPron = pinyin
-                      ? freeTextPinyinToKorean(pinyin)
-                      : "";
-
-                    return (
-                      <Box key={idx} sx={{ mb: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {l.role || `L${idx + 1}`}
-                        </Typography>
-                        <Typography sx={{ mt: 0.1 }}>{l.zh}</Typography>
-                        {pinyin && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {pinyin}
-                          </Typography>
-                        )}
-                        {koPron && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: "block" }}
-                          >
-                            {koPron}
-                          </Typography>
-                        )}
-                        {l.ko && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {l.ko}
-                          </Typography>
-                        )}
-                      </Box>
-                    );
-                  })}
-
-                  {d.lines && d.lines.length > 3 && (
-                    <Typography variant="caption" color="text.secondary">
-                      · 외 {d.lines.length - 3}줄…
-                    </Typography>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* ---------------- 회화: 외웠음 ---------------- */}
-        <SectionCard title="회화 (외웠음)" color="success">
-          {dialogMaster.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              외웠다고 표시한 회화가 없습니다.
-            </Typography>
-          ) : (
-            <Stack spacing={1.2}>
-              {dialogMaster.map((d) => (
-                <Box
-                  key={d.dialogId}
-                  onClick={() => handleSpeakDialog(d)}
-                  role="button"
-                  tabIndex={0}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid #eee",
-                    p: 1.3,
-                    bgcolor: "#E8FFF3",
-                    cursor: "pointer",
-                    "&:hover": { bgcolor: "#D4FBE7" },
-                  }}
-                >
-                  {d.topic && (
-                    <Typography variant="caption" color="text.secondary">
-                      {d.topic}
-                    </Typography>
-                  )}
-                  <Divider sx={{ my: 0.5 }} />
-
-                  {(d.lines || []).slice(0, 3).map((l, idx) => {
-                    const pinyin = l.pinyin || "";
-                    const koPron = pinyin
-                      ? freeTextPinyinToKorean(pinyin)
-                      : "";
-
-                    return (
-                      <Box key={idx} sx={{ mb: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {l.role || `L${idx + 1}`}
-                        </Typography>
-                        <Typography sx={{ mt: 0.1 }}>{l.zh}</Typography>
-                        {pinyin && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {pinyin}
-                          </Typography>
-                        )}
-                        {koPron && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: "block" }}
-                          >
-                            {koPron}
-                          </Typography>
-                        )}
-                        {l.ko && (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {l.ko}
-                          </Typography>
-                        )}
-                      </Box>
-                    );
-                  })}
-
-                  {d.lines && d.lines.length > 3 && (
-                    <Typography variant="caption" color="text.secondary">
-                      · 외 {d.lines.length - 3}줄…
-                    </Typography>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </SectionCard>
-
-        {/* 하단 버튼 */}
-        <Stack direction="row" spacing={1.2}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<ReplayIcon />}
-            disabled
-            sx={{ fontWeight: 800 }}
-          >
-            랜덤 퀴즈 (추후)
-          </Button>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<HomeIcon />}
-            onClick={() => nav("/app")}
-            sx={{ fontWeight: 800 }}
-          >
-            홈으로
-          </Button>
-        </Stack>
+        {/* QUIZ 탭 */}
+        {tab === TAB_QUIZ && (
+          <RandomQuizPanel
+            questions={quizQuestions}
+            currentIdx={quizIdx}
+            selected={quizSelected}
+            isCorrect={quizIsCorrect}
+            finished={quizFinished}
+            correctCount={quizCorrectCount}
+            onSelect={handleQuizSelect}
+            onNext={handleQuizNext}
+            onBackToReview={() => setTab(TAB_REVIEW)}
+          />
+        )}
       </Stack>
     </Box>
   );

@@ -1,4 +1,4 @@
-// /src/routes/app.routes.jsx
+// src/routes/app.routes.jsx
 import AppHome from "../app/pages/AppHome";
 import WordSession from "../app/pages/WordSession";
 import GrammarSession from "../app/pages/GrammarSession";
@@ -34,4 +34,5 @@ export default [
   { path: "review", element: <RandomReview /> },
   { path: "history", element: <History /> },
   { path: "mypage", element: <MyPage /> },
+
 ];

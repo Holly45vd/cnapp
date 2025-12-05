@@ -1,5 +1,5 @@
+///workspaces/cnapp/src/routes/index.jsx
 import { createBrowserRouter } from "react-router-dom";
-
 import LoginPage from "../shared/pages/LoginPage";
 import AdminLayout from "../layouts/AdminLayout";
 import AppLayout from "../layouts/AppLayout";

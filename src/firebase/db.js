@@ -116,7 +116,6 @@ export async function listUserHistoryRange(uid, startKey, endKey) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-
 // ✅ 특정 날짜의 studyHistory 일부 필드를 merge 업데이트
 export async function updateUserHistoryDoc(uid, dateKey, partial) {
   if (!uid || !dateKey) {
@@ -128,4 +127,9 @@ export async function updateUserHistoryDoc(uid, dateKey, partial) {
 
   // 해당 날짜 문서를 부분 업데이트(merge)
   await setDoc(histRef, partial, { merge: true });
+}
+
+// ✅ 다시보기/외웠음 토글용 래퍼 (가독성용)
+export async function updateUserHistoryReview(uid, dateKey, partial) {
+  return updateUserHistoryDoc(uid, dateKey, partial);
 }
