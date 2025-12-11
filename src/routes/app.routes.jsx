@@ -6,6 +6,7 @@ import DialogSession from "../app/pages/DialogSession";
 import RandomReview from "../app/pages/RandomReview";
 import History from "../app/pages/History";
 import MyPage from "../app/pages/MyPage";
+import StudiedWords from "../app/pages/StudiedWords";
 
 import TodayStudySession from "../app/pages/TodayStudySession";
 import DoneToday from "../app/pages/DoneToday";
@@ -33,6 +34,6 @@ export default [
   // 복습/기록/마이
   { path: "review", element: <RandomReview /> },
   { path: "history", element: <History /> },
+  { path: "history/words", element: <StudiedWords /> }, // ✅ 여기 추가
   { path: "mypage", element: <MyPage /> },
-
 ];

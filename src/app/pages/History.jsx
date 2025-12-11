@@ -15,10 +15,12 @@ import {
   Chip,
   Grid,
   LinearProgress,
+  Button,
 } from "@mui/material";
 
 import BarChartIcon from "@mui/icons-material/BarChart";
 import TodayIcon from "@mui/icons-material/Today";
+import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 
 // 🔥 Weekly 상세 리스트 (지난 7일)
 import WeeklyHistorySection from "../components/WeeklyHistorySection";
@@ -213,13 +215,31 @@ export default function History() {
     <Box sx={{ minHeight: "100vh", p: 1 }}>
       <Stack spacing={2.5} sx={{ p: 1 }}>
         {/* 헤더 */}
-        <Stack spacing={0.5}>
-          <Typography variant="h5" fontWeight={800}>
-            학습 기록
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {user?.displayName || user?.email?.split("@")[0]}님의 히스토리
-          </Typography>
+        <Stack
+          spacing={0.5}
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Box>
+            <Typography variant="h5" fontWeight={800}>
+              학습 기록
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {user?.displayName || user?.email?.split("@")[0]}님의 히스토리
+            </Typography>
+          </Box>
+
+          {/* 🔘 내가 공부한 단어 모아보기 버튼 */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AutoStoriesIcon />}
+            onClick={() => nav("/app/history/words")}
+            sx={{ borderRadius: 999, fontWeight: 700 }}
+          >
+            공부한 단어 모아보기
+          </Button>
         </Stack>
 
         {/* --------------------- */}
@@ -284,24 +304,44 @@ export default function History() {
                 spacing={1.5}
                 sx={{ display: "flex", justifyContent: "center" }}
               >
-                <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
-                  <TotalBubble label="단어" value={stats.totalWords} color="#EEF3FF" />
+                <Grid
+                  item
+                  xs={3}
+                  sx={{ display: "flex", justifyContent: "center" }}
+                >
+                  <TotalBubble
+                    label="단어"
+                    value={stats.totalWords}
+                    color="#EEF3FF"
+                  />
                 </Grid>
-                <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+                <Grid
+                  item
+                  xs={3}
+                  sx={{ display: "flex", justifyContent: "center" }}
+                >
                   <TotalBubble
                     label="문장"
                     value={stats.totalSentences}
                     color="#EAF5FF"
                   />
                 </Grid>
-                <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+                <Grid
+                  item
+                  xs={3}
+                  sx={{ display: "flex", justifyContent: "center" }}
+                >
                   <TotalBubble
                     label="문법"
                     value={stats.totalGrammar}
                     color="#FFF4E2"
                   />
                 </Grid>
-                <Grid item xs={3} sx={{ display: "flex", justifyContent: "center" }}>
+                <Grid
+                  item
+                  xs={3}
+                  sx={{ display: "flex", justifyContent: "center" }}
+                >
                   <TotalBubble
                     label="회화"
                     value={stats.totalDialogs}

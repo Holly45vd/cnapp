@@ -32,7 +32,7 @@ import ForumIcon from "@mui/icons-material/Forum";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 
 /**
- * ====== 자동 매핑 로직 ======
+ * ====== 자동 매핑 로직 (단어/문장/회화 ↔ 문법) ======
  */
 async function autoMapAll() {
   const wordsSnap = await getDocs(collection(db, "words"));
@@ -153,6 +153,117 @@ async function autoMapAll() {
   };
 }
 
+/**
+ * ====== HSK ↔ words 자동 매핑 (hskWords → words) ======
+ * - 기준: words.zh === hskWords.simplified
+ * - 결과: words 문서에 hskLevel, hskLabel, hskMappedAt 필드 저장
+ */
+async function autoMapHskToWords() {
+  // 1) HSK 인덱스 로딩
+  const hskSnap = await getDocs(collection(db, "hskWords"));
+  const hskIndex = {};
+
+  hskSnap.docs.forEach((d) => {
+    const data = d.data() || {};
+    const simplified = (data.simplified || d.id || "").trim();
+    if (!simplified) return;
+
+    // 레벨 숫자
+    let levelNum = data.hskLevel ?? null;
+    if (levelNum == null && typeof data.hskLabel === "string") {
+      const m = data.hskLabel.match(/(\d+)/);
+      if (m) levelNum = Number(m[1]);
+    }
+    if (
+      levelNum == null &&
+      typeof data.hsk_level === "string" &&
+      !Number.isNaN(Number(data.hsk_level.replace(/[^\d]/g, "")))
+    ) {
+      const n = Number(data.hsk_level.replace(/[^\d]/g, ""));
+      if (!Number.isNaN(n)) levelNum = n;
+    }
+
+    const label =
+      data.hskLabel ||
+      data.hsk_level ||
+      (levelNum ? `HSK${levelNum}` : null);
+
+    hskIndex[simplified] = {
+      level: levelNum,
+      label,
+    };
+  });
+
+  // 2) words 전체 로딩
+  const wordsSnap = await getDocs(collection(db, "words"));
+  const now = Date.now();
+
+  let total = 0;
+  let matched = 0;
+  let notMatched = 0;
+  let already = 0;
+
+  let batch = writeBatch(db);
+  let writes = 0;
+
+  for (const docSnap of wordsSnap.docs) {
+    const data = docSnap.data() || {};
+    const zh = (data.zh || "").trim();
+    total += 1;
+
+    if (!zh) {
+      notMatched += 1;
+      continue;
+    }
+
+    const info = hskIndex[zh];
+    if (!info) {
+      notMatched += 1;
+      continue;
+    }
+
+    const prevLevel = data.hskLevel ?? null;
+    const prevLabel = data.hskLabel ?? null;
+
+    // 이미 동일 값이면 스킵
+    if (prevLevel === info.level && prevLabel === info.label) {
+      already += 1;
+      continue;
+    }
+
+    batch.set(
+      doc(db, "words", docSnap.id),
+      {
+        hskLevel: info.level ?? null,
+        hskLabel: info.label ?? null,
+        hskMappedAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    matched += 1;
+    writes += 1;
+
+    if (writes >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      writes = 0;
+    }
+  }
+
+  if (writes > 0) {
+    await batch.commit();
+  }
+
+  return {
+    total,
+    matched,
+    notMatched,
+    already,
+  };
+}
+
 function findGrammarId(grammars, key) {
   const g = grammars.find(
     (x) =>
@@ -179,6 +290,10 @@ export default function AdminHome() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
+  const [hskRunning, setHskRunning] = useState(false);
+  const [hskResult, setHskResult] = useState(null);
+  const [hskError, setHskError] = useState("");
+
   const handleAutoMap = async () => {
     setRunning(true);
     setResult(null);
@@ -192,6 +307,22 @@ export default function AdminHome() {
       setError(e.message || "자동 매핑 실패");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleAutoMapHsk = async () => {
+    setHskRunning(true);
+    setHskResult(null);
+    setHskError("");
+
+    try {
+      const res = await autoMapHskToWords();
+      setHskResult(res);
+    } catch (e) {
+      console.error(e);
+      setHskError(e.message || "HSK 자동 매핑 실패");
+    } finally {
+      setHskRunning(false);
     }
   };
 
@@ -242,48 +373,100 @@ export default function AdminHome() {
       {/* 자동 매핑 액션 */}
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent>
-          <Stack spacing={1.5}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <AutoFixHighIcon fontSize="small" />
-              <Typography variant="h6" fontWeight={700}>
-                자동 매핑 실행
+          <Stack spacing={2}>
+            {/* ===== 단어/문장/회화 ↔ 문법 자동 매핑 ===== */}
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoFixHighIcon fontSize="small" />
+                <Typography variant="h6" fontWeight={700}>
+                  자동 매핑 실행
+                </Typography>
+                <Chip size="small" label="MVP" />
+              </Stack>
+
+              <Typography variant="body2" color="text.secondary">
+                sentences와 dialogs를 스캔해서 단어(words) / 문법(grammar) 링크를 자동으로 채웁니다.
               </Typography>
-              <Chip size="small" label="MVP" />
+
+              <Divider />
+
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleAutoMap}
+                  disabled={running}
+                  startIcon={!running ? <AutoFixHighIcon /> : null}
+                  sx={{ borderRadius: 2, px: 3, fontWeight: 700 }}
+                >
+                  {running ? "매핑 실행 중..." : "단어/문장/회화 자동 매핑"}
+                </Button>
+
+                {running && <CircularProgress size={22} />}
+              </Stack>
+
+              {result && (
+                <Alert severity="success" sx={{ borderRadius: 2 }}>
+                  완료! sentences {result.sentencesUpdated}개 / dialogs{" "}
+                  {result.dialogsUpdated}개 업데이트됨.
+                </Alert>
+              )}
+
+              {error && (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                  {error}
+                </Alert>
+              )}
             </Stack>
 
-            <Typography variant="body2" color="text.secondary">
-              sentences와 dialogs를 스캔해서 단어(words) / 문법(grammar) 링크를 자동으로 채웁니다.
-            </Typography>
-
+            {/* ===== HSK 레벨 자동 매핑 ===== */}
             <Divider />
 
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Button
-                variant="contained"
-                size="large"
-                onClick={handleAutoMap}
-                disabled={running}
-                startIcon={!running ? <AutoFixHighIcon /> : null}
-                sx={{ borderRadius: 2, px: 3, fontWeight: 700 }}
-              >
-                {running ? "매핑 실행 중..." : "단어/문장/회화 자동 매핑"}
-              </Button>
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip size="small" label="HSK" color="primary" />
+                <Typography variant="h6" fontWeight={700}>
+                  HSK 레벨 자동 매핑
+                </Typography>
+              </Stack>
 
-              {running && <CircularProgress size={22} />}
+              <Typography variant="body2" color="text.secondary">
+                hskWords 컬렉션의 간체(simplified)와 words 컬렉션의 zh를 매칭해서
+                각 단어에 hskLevel / hskLabel 필드를 자동으로 채웁니다.
+                <br />
+                이 작업을 해두면, 학습 화면에서 HSK 급수별로 단어를 나눠서 공부할 수 있어.
+              </Typography>
+
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button
+                  variant="outlined"
+                  size="large"
+                  onClick={handleAutoMapHsk}
+                  disabled={hskRunning}
+                  sx={{ borderRadius: 2, px: 3, fontWeight: 700 }}
+                >
+                  {hskRunning ? "HSK 매핑 중..." : "HSK → 단어 자동 매핑"}
+                </Button>
+                {hskRunning && <CircularProgress size={22} />}
+              </Stack>
+
+              {hskResult && (
+                <Alert severity="success" sx={{ borderRadius: 2 }}>
+                  HSK 매핑 완료!
+                  <br />
+                  전체 단어: {hskResult.total}개 /
+                  매칭됨: {hskResult.matched}개 /
+                  매칭 없음: {hskResult.notMatched}개 /
+                  이미 동일해서 건너뜀: {hskResult.already}개
+                </Alert>
+              )}
+
+              {hskError && (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                  {hskError}
+                </Alert>
+              )}
             </Stack>
-
-            {result && (
-              <Alert severity="success" sx={{ borderRadius: 2 }}>
-                완료! sentences {result.sentencesUpdated}개 / dialogs{" "}
-                {result.dialogsUpdated}개 업데이트됨.
-              </Alert>
-            )}
-
-            {error && (
-              <Alert severity="error" sx={{ borderRadius: 2 }}>
-                {error}
-              </Alert>
-            )}
           </Stack>
         </CardContent>
       </Card>

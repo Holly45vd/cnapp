@@ -30,6 +30,8 @@ import StorageIcon from "@mui/icons-material/Storage";
 import ArticleIcon from "@mui/icons-material/Article";
 import ForumIcon from "@mui/icons-material/Forum";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload"; // 🔹 HSK 업로드용 아이콘
+import LabelIcon from "@mui/icons-material/Label"; // (선택) HSK 단어 관리용 아이콘
 
 const drawerWidth = 240;
 
@@ -37,13 +39,20 @@ export default function AdminLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  // ✅ "어드민 홈" 추가
+  // 🔹 어드민 메뉴 목록
   const nav = [
     { to: "/admin", label: "홈", icon: <DashboardIcon fontSize="small" /> },
     { to: "/admin/words", label: "단어", icon: <StorageIcon fontSize="small" /> },
     { to: "/admin/sentences", label: "문장", icon: <ArticleIcon fontSize="small" /> },
     { to: "/admin/dialogs", label: "회화", icon: <ForumIcon fontSize="small" /> },
     { to: "/admin/grammar", label: "문법", icon: <MenuBookIcon fontSize="small" /> },
+
+    // ✅ HSK JSON → Firestore 업로드 페이지
+    { to: "/admin/hsk-import", label: "HSK 업로드", icon: <CloudUploadIcon fontSize="small" /> },
+
+
+  // { to: "/admin/hsk-words", label: "HSK 단어", icon: <LabelIcon fontSize="small" /> },
+   { to: "/admin/hsk-missing", label: "HSK 미등록", icon: <StorageIcon fontSize="small" /> },
   ];
 
   const handleDrawerToggle = () => setMobileOpen((p) => !p);
@@ -76,7 +85,7 @@ export default function AdminLayout() {
       {/* Nav list */}
       <List sx={{ px: 1 }}>
         {nav.map((n) => {
-          // ✅ /admin은 exact match, 나머진 startsWith
+          // ✅ /admin은 exact match, 나머지는 startsWith
           const active =
             n.to === "/admin"
               ? location.pathname === "/admin"
@@ -100,7 +109,12 @@ export default function AdminLayout() {
                 "&.Mui-selected:hover": { bgcolor: "black" },
               }}
             >
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ width: "100%" }}
+              >
                 {n.icon}
                 <ListItemText primary={n.label} />
               </Stack>
@@ -195,7 +209,6 @@ export default function AdminLayout() {
             width: drawerWidth,
             boxSizing: "border-box",
             borderRight: "1px solid #eee",
-
             // ✅ AppBar 높이만큼 위 여백 확보
             pt: "64px", // 기본 Toolbar height(데스크탑)
           },
