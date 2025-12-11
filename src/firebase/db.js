@@ -133,3 +133,62 @@ export async function updateUserHistoryDoc(uid, dateKey, partial) {
 export async function updateUserHistoryReview(uid, dateKey, partial) {
   return updateUserHistoryDoc(uid, dateKey, partial);
 }
+
+/* ===========================
+ *  Daily Routine 전역 설정
+ *  appConfig/routine 문서 사용
+ * =========================== */
+
+/**
+ * 🔹 Daily Routine 설정 조회
+ *  - 문서가 없으면 기본값 반환
+ */
+export async function getRoutineConfig() {
+  const ref = doc(db, "appConfig", "routine");
+  const snap = await getDoc(ref);
+
+  const defaultConfig = {
+    wordCount: 5,
+    sentenceCount: 5,
+    grammarCount: 1,
+    dialogCount: 1,
+  };
+
+  if (!snap.exists()) return defaultConfig;
+
+  const data = snap.data() || {};
+  return {
+    wordCount:
+      typeof data.wordCount === "number" ? data.wordCount : defaultConfig.wordCount,
+    sentenceCount:
+      typeof data.sentenceCount === "number"
+        ? data.sentenceCount
+        : defaultConfig.sentenceCount,
+    grammarCount:
+      typeof data.grammarCount === "number"
+        ? data.grammarCount
+        : defaultConfig.grammarCount,
+    dialogCount:
+      typeof data.dialogCount === "number"
+        ? data.dialogCount
+        : defaultConfig.dialogCount,
+  };
+}
+
+/**
+ * 🔹 Daily Routine 설정 저장 (어드민 전용)
+ *  - 숫자 변환 후 저장, updatedAt 갱신
+ */
+export async function saveRoutineConfig(config) {
+  const ref = doc(db, "appConfig", "routine");
+
+  const payload = {
+    wordCount: Number(config.wordCount) || 0,
+    sentenceCount: Number(config.sentenceCount) || 0,
+    grammarCount: Number(config.grammarCount) || 0,
+    dialogCount: Number(config.dialogCount) || 0,
+    updatedAt: serverTimestamp(),
+  };
+
+  await setDoc(ref, payload, { merge: true });
+}

@@ -6,6 +6,7 @@ import { buildRoutineFromHistory } from "../utils/routineEngine";
 import {
   listCollection,
   listUserHistoryRange,
+  getRoutineConfig,          // 🔹 추가
 } from "../../firebase/db";
 import { toDateKey } from "../../shared/utils/date";
 
@@ -129,13 +130,15 @@ export default function AppHome() {
       try {
         setLoading(true);
 
-        // 1) 학습 풀 로딩
-        const [words, grammar, dialogs, sentences] = await Promise.all([
-          listCollection("words"),
-          listCollection("grammar"),
-          listCollection("dialogs"),
-          listCollection("sentences"),
-        ]);
+        // 1) 학습 풀 + 루틴 설정 같이 로딩
+        const [words, grammar, dialogs, sentences, routineConfig] =
+          await Promise.all([
+            listCollection("words"),
+            listCollection("grammar"),
+            listCollection("dialogs"),
+            listCollection("sentences"),
+            getRoutineConfig(), // 🔹 전역 설정 불러오기
+          ]);
 
         const pools = {
           words: words.map((w) => ({ ...w, id: w.wordId })),
@@ -169,12 +172,12 @@ export default function AppHome() {
           ])
         );
 
-        const todaySet = buildRoutineFromHistory(pools, recentIds, {
-          wordCount: 9,
-          sentenceCount: 9,
-          grammarCount: 2,
-          dialogCount: 1,
-        });
+        // 🔹 전역 설정 기반 루틴 생성
+        const todaySet = buildRoutineFromHistory(
+          pools,
+          recentIds,
+          routineConfig
+        );
 
         setRoutine(todaySet);
 
